@@ -19,35 +19,26 @@ class RotationMathTests(unittest.TestCase):
             [(6, 8.0), (2, 11.25)], 3, 2, 3),
             (2, 11.25))
 
-    def test_drag_axes_follow_eu_turret_and_gun_rules(self):
+    def test_turret_and_gun_drags_use_every_available_axis(self):
         from wotstat_spotting_points.rotation_math import (
             canStartPartDrag, getDragAxes)
 
-        self.assertEqual(getDragAxes(2, 2, 3, True, True), (True, False))
+        self.assertEqual(getDragAxes(2, 2, 3, True, True), (True, True))
         self.assertEqual(getDragAxes(3, 2, 3, True, True), (True, True))
         self.assertEqual(getDragAxes(3, 2, 3, False, True), (False, True))
         self.assertTrue(canStartPartDrag(2, 2, 3, True, False))
-        self.assertFalse(canStartPartDrag(2, 2, 3, False, True))
+        self.assertTrue(canStartPartDrag(2, 2, 3, False, True))
         self.assertTrue(canStartPartDrag(3, 2, 3, False, True))
-        self.assertFalse(canStartPartDrag(3, 2, 3, True, False))
+        self.assertTrue(canStartPartDrag(3, 2, 3, True, False))
 
-    def test_inversion_multipliers_reverse_mouse_deltas(self):
+    def test_mouse_right_always_turns_counterclockwise_at_double_sensitivity(self):
         from wotstat_spotting_points.rotation_math import nextAngles
 
         yaw, pitch = nextAngles(
-            0.0, 0.0, 20.0, 10.0, None, (-0.2, 0.3),
-            yawMultiplier=-1.0, pitchMultiplier=-1.0)
+            1.0, 0.0, 100.0, 50.0, None, (-0.2, 0.3))
 
-        self.assertAlmostEqual(yaw, 0.03)
-        self.assertAlmostEqual(pitch, -0.015)
-
-    def test_turret_drag_filters_vertical_mouse_delta(self):
-        from wotstat_spotting_points.rotation_math import filterDragDeltas
-
-        self.assertEqual(filterDragDeltas(100.0, 200.0, True, False),
-                         (100.0, 0.0))
-        self.assertEqual(filterDragDeltas(100.0, 200.0, True, True),
-                         (100.0, 200.0))
+        self.assertAlmostEqual(yaw, 0.7)
+        self.assertAlmostEqual(pitch, 0.15)
 
     def test_rotating_part_hit_ignores_procedural_attachments(self):
         from wotstat_spotting_points.rotation_math import isRotatingPartHit
@@ -61,13 +52,13 @@ class RotationMathTests(unittest.TestCase):
         self.assertFalse(isRotatingPartHit([6, 0, 3], 3, 2, 3))
         self.assertFalse(isRotatingPartHit([6, 5], 3, 2, 3))
 
-    def test_full_circle_yaw_uses_eu_armor_view_range(self):
+    def test_full_circle_yaw_stays_normalized(self):
         from wotstat_spotting_points.rotation_math import nextAngles
         yaw, pitch = nextAngles(math.pi - 0.01, 0.0, -100.0, 0.0,
                                 None, (-0.2, 0.3))
 
         self.assertTrue(0.0 <= yaw < 2.0 * math.pi)
-        self.assertAlmostEqual(yaw, math.pi + 0.14)
+        self.assertAlmostEqual(yaw, math.pi + 0.29)
         self.assertEqual(pitch, 0.0)
 
     def test_limited_yaw_and_pitch_are_clamped(self):

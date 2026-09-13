@@ -4,7 +4,7 @@
 
 **Goal:** Add a compact non-modal settings window opened from ModsList, three independent visualization switches, and descriptor-limited mouse control of the hangar turret and gun.
 
-**Architecture:** Python owns an in-memory options model, rendering, and hangar input lifecycle. A unique Scaleform `AbstractWindowView` SWF displays stock checkboxes and forwards changes to Python. Turret dragging uses the same cursor ray, collision query, rotation sensitivity, and descriptor limit helpers as the native vehicle armor inspector, while an EventBus restriction suppresses camera movement only during an accepted turret/gun drag.
+**Architecture:** Python owns an in-memory options model, rendering, and hangar input lifecycle. A unique Scaleform `AbstractWindowView` SWF displays stock checkboxes and forwards changes to Python. Turret dragging uses the native cursor ray and collision query plus descriptor limit helpers, with a fixed direction and 0.003-radian-per-pixel sensitivity, while an EventBus restriction suppresses camera movement only during an accepted turret/gun drag.
 
 **Tech Stack:** Python 2.7, BigWorld hangar APIs, Scaleform/AS3, Apache Royale 0.9.12, Python `unittest`, PowerShell packaging, WotStat REPL 1.4.1 MCP.
 
@@ -32,7 +32,7 @@
 
 **Interfaces:**
 - Produces: `DisplayOptions()` with boolean attributes `showMaskPoints`, `showSpotPoints`, `showGuides`, `allowTurretRotation`, `setValue(name, value) -> bool`, `asDict() -> dict`, and `hasVisuals() -> bool`.
-- Produces: `nextAngles(yaw, pitch, dx, dy, yawLimits, pitchLimits, sensitivity=0.0015) -> (yaw, pitch)`.
+- Produces: `nextAngles(yaw, pitch, dx, dy, yawLimits, pitchLimits, sensitivity=0.003) -> (yaw, pitch)`.
 - Consumes: no game-client imports, so both units run under stock Python 2.7 tests.
 
 - [ ] **Step 1: Write failing options tests**
@@ -92,10 +92,10 @@ class DisplayOptions(object):
 
 ```python
 class RotationMathTests(unittest.TestCase):
-    def test_full_circle_yaw_is_normalized(self):
-        yaw, pitch = nextAngles(math.pi - 0.01, 0.0, -100.0, 0.0,
-                                None, (-0.2, 0.3))
-        self.assertTrue(-math.pi <= yaw <= math.pi)
+def test_full_circle_yaw_is_normalized(self):
+    yaw, pitch = nextAngles(math.pi - 0.01, 0.0, -100.0, 0.0,
+                            None, (-0.2, 0.3))
+    self.assertTrue(0.0 <= yaw < 2.0 * math.pi)
         self.assertEqual(pitch, 0.0)
 
     def test_limited_yaw_and_pitch_are_clamped(self):
@@ -117,10 +117,10 @@ def clamp(value, limits):
     return max(limits[0], min(limits[1], value))
 
 def normalizeAngle(value):
-    return (value + math.pi) % (2.0 * math.pi) - math.pi
+    return value % (2.0 * math.pi)
 
 def nextAngles(yaw, pitch, dx, dy, yawLimits, pitchLimits,
-               sensitivity=0.0015):
+               sensitivity=0.003):
     yaw -= dx * sensitivity
     yaw = normalizeAngle(yaw) if yawLimits is None else clamp(yaw, yawLimits)
     pitch = clamp(pitch + dy * sensitivity, pitchLimits)
