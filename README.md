@@ -7,10 +7,11 @@
 немодальное окно в штатном стиле клиента. Ангар под ним остаётся интерактивным.
 Повторное нажатие в ModsList активирует уже открытое окно, а не создаёт второе.
 
-В окне есть четыре независимых флага:
+В окне есть пять независимых флагов:
 
 - отображать габаритные точки;
 - отображать обзорные точки;
+- отображать точки в UI;
 - отображать направляющие;
 - разрешить вращение башни мышью.
 
@@ -31,6 +32,15 @@
 BBox и направляющие SpottingUtil (`showBBoxes` + `showBBoxAlign`).
 Совпадающая точка рисуется один раз голубым.
 
+Режим «Отображать точки в UI» одновременно показывает все габаритные и
+обзорные точки поверх ангара независимо от двух флагов 3D-сфер. Маркеры
+пульсируют штатным Scaleform Tween, все видимые точки всегда имеют сноски.
+Сначала размещаются сноски с самым коротким горизонтальным выносом, а более
+длинные линии занимают ближайшие свободные позиции выше или ниже. Наведение на
+маркер или сноску выделяет только образующие точку направляющие жёлтым цветом
+поверх модели. Позиции маркеров обновляются нативным ангарным marker provider
+на кадре рендера и не зависят от частоты Python callback.
+
 Нужен [ModsList API](https://docs.wotstat.info/guide/integrations/mods-list/).
 Мод не подменяет штатные файлы или общие обработчики: у окна собственные alias
 и SWF. Во время целевого drag-жеста мод через штатный camera manager временно
@@ -40,9 +50,9 @@ Armor Inspector; обработчик вращения этого мода та�
 
 ## Установка
 
-- «Мир танков»: `dist/wotstat.spotting-points_0.2.6.mtmod` →
+- «Мир танков»: `dist/wotstat.spotting-points_0.3.0.mtmod` →
   `mods/<версия игры>/`.
-- World of Tanks: `dist/wotstat.spotting-points_0.2.6.wotmod` →
+- World of Tanks: `dist/wotstat.spotting-points_0.3.0.wotmod` →
   `mods/<версия игры>/`.
 
 Пакет устанавливайте при закрытой игре. При обновлении удалите только прежний
@@ -54,12 +64,13 @@ Armor Inspector; обработчик вращения этого мода та�
 в `as3/libs`. Файлы SWC не коммитятся и не попадают в мод.
 
 ```powershell
-./build.ps1 -Version 0.2.6 -Python C:/Python27/python.exe
+./build.ps1 -Version 0.3.0 -Python C:/Python27/python.exe
 C:/Python27/python.exe -B -m unittest discover -s tests
 ```
 
 `build.ps1` компилирует уникальный
-`res/gui/flash/wotstatSpottingPointsSettings.swf`, компилирует staged
+`res/gui/flash/wotstatSpottingPointsSettings.swf` и отдельный слой маркеров
+`res/gui/flash/wotstatSpottingPointsMarkers.swf`, компилирует staged
 Python-файлы и формирует `.mtmod` и `.wotmod` в `dist`. Пути к Royale и Java
 можно задать параметрами `-Royale` и `-JavaHome`.
 

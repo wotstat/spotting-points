@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.2.6',
+    [string]$Version = '0.3.0',
     [string]$Python = 'C:\Python27\python.exe',
     [string]$Royale = "$env:LOCALAPPDATA\Programs\ApacheRoyale\0.9.12\royale-asjs",
     [string]$JavaHome = ''
@@ -42,8 +42,16 @@ New-Item -ItemType Directory -Path $flashOutput -Force | Out-Null
 $previousJavaHome = $env:JAVA_HOME
 try {
     $env:JAVA_HOME = $JavaHome
-    & $compiler '-compiler.targets=SWF' '-target-player=17.0' '-swf-version=17' '-debug=false' "-compiler.source-path=$PSScriptRoot\as3\src" "-compiler.external-library-path=$as3Libs,$playerGlobal" "-output=$flashOutput\wotstatSpottingPointsSettings.swf" "$PSScriptRoot\as3\src\wotstat\spottingpoints\SettingsWindow.as"
-    if ($LASTEXITCODE -ne 0) { throw 'Scaleform compilation failed' }
+    $flashTargets = @(
+        @('wotstatSpottingPointsSettings.swf', 'SettingsWindow.as'),
+        @('wotstatSpottingPointsMarkers.swf', 'MarkerOverlay.as')
+    )
+    foreach ($target in $flashTargets) {
+        $outputPath = Join-Path $flashOutput $target[0]
+        $sourcePath = Join-Path $PSScriptRoot "as3\src\wotstat\spottingpoints\$($target[1])"
+        & $compiler '-compiler.targets=SWF' '-target-player=17.0' '-swf-version=17' '-debug=false' "-compiler.source-path=$PSScriptRoot\as3\src" "-compiler.external-library-path=$as3Libs,$playerGlobal" "-output=$outputPath" "$sourcePath"
+        if ($LASTEXITCODE -ne 0) { throw "Scaleform compilation failed: $($target[1])" }
+    }
 }
 finally {
     $env:JAVA_HOME = $previousJavaHome

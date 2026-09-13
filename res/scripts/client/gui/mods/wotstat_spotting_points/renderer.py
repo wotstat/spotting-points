@@ -4,11 +4,12 @@ from realm import CURRENT_REALM
 from vehicle_systems.tankStructure import TankPartIndexes, TankNodeNames
 
 from .geometry import (
-    addMovingGunPoint, buildGeometry, buildTurretArc, LineGeometry,
-    selectGeometry)
+    addMovingGunPoint, buildGeometry, buildHighlightGroups, buildTurretArc,
+    LineGeometry, selectGeometry)
 
 MASK_COLORS = (0xff3135, 0xab6d67)
 SPOT_COLORS = (0x00aaff, 0x5990bf)
+HIGHLIGHT_COLOR = 0xffd54a
 # The clients submit DebugDrawer primitives in opposite order.
 PASSES = (False, True) if CURRENT_REALM == 'RU' else (True, False)
 
@@ -33,7 +34,15 @@ def drawLine(drawer, geometry):
         line.points(geometry.points)
 
 
-def getWorldGeometry(vehicle):
+def drawHighlightLine(drawer, geometry):
+    line = drawer.line()
+    line.colour(HIGHLIGHT_COLOR)
+    line.zTest(False)
+    line.zWrite(False)
+    line.points(geometry.points)
+
+
+def getWorldGeometry(vehicle, includeLines=True):
     appearance = vehicle.appearance
     collisions = appearance.collisions
     if collisions is None:
@@ -51,8 +60,11 @@ def getWorldGeometry(vehicle):
                                  turretOffset, descr.turret.gunPosition)
     matrix = Matrix(vehicle.matrix)
     maskPoints = [matrix.applyPoint(Vector3(p)) for p in points]
-    worldLines = [LineGeometry([matrix.applyPoint(Vector3(p)) for p in line.points],
-                              line.color, line.backColor) for line in lines]
+    worldLines = None
+    if includeLines:
+        worldLines = [LineGeometry(
+            [matrix.applyPoint(Vector3(p)) for p in line.points],
+            line.color, line.backColor) for line in lines]
 
     # This model node already includes actual turret rotation, yaw limits,
     # static angles and customization animations in both clients.
@@ -60,33 +72,50 @@ def getWorldGeometry(vehicle):
     if gunJoint is None:
         return None
     movingPoint = Vector3(gunJoint.position)
-    inverseMatrix = Matrix(matrix)
-    inverseMatrix.invert()
-    movingPointLocal = inverseMatrix.applyPoint(movingPoint)
-    turretAxis = tuple(hullOffset[i] + turretOffset[i] for i in range(3))
-    arcPoints = buildTurretArc(turretAxis, points[4], movingPointLocal)
-    if arcPoints:
-        worldArc = [matrix.applyPoint(Vector3(p)) for p in arcPoints]
-        worldArc[0] = maskPoints[4]
-        worldArc[-1] = movingPoint
-        worldLines.append(LineGeometry(worldArc, 0x959595, 0x646464))
+    if includeLines:
+        inverseMatrix = Matrix(matrix)
+        inverseMatrix.invert()
+        movingPointLocal = inverseMatrix.applyPoint(movingPoint)
+        turretAxis = tuple(hullOffset[i] + turretOffset[i] for i in range(3))
+        arcPoints = buildTurretArc(turretAxis, points[4], movingPointLocal)
+        if arcPoints:
+            worldArc = [matrix.applyPoint(Vector3(p)) for p in arcPoints]
+            worldArc[0] = maskPoints[4]
+            worldArc[-1] = movingPoint
+            worldLines.append(LineGeometry(worldArc, 0x959595, 0x646464))
     maskPoints, spotPoints = addMovingGunPoint(
         maskPoints, [maskPoints[5]], movingPoint)
     return maskPoints, spotPoints, worldLines
 
 
-def drawVehicle(vehicle, showMaskPoints, showSpotPoints, showGuides):
-    geometry = getWorldGeometry(vehicle)
-    if geometry is None:
-        return
+def drawGeometry(geometry, showMaskPoints, showSpotPoints, showGuides,
+                 hoveredPointId=None):
     maskPoints, spotPoints, lines = geometry
-    maskPoints, spotPoints, lines = selectGeometry(
-        maskPoints, spotPoints, lines, showMaskPoints, showSpotPoints,
+    selectedMask, selectedSpots, selectedLines = selectGeometry(
+        maskPoints, spotPoints, lines or (), showMaskPoints, showSpotPoints,
         showGuides)
+    if not (selectedMask or selectedSpots or selectedLines
+            or hoveredPointId is not None):
+        return
     drawer = DebugDrawer()
-    for line in lines:
+    for line in selectedLines:
         drawLine(drawer, line)
-    for point in maskPoints:
+    for point in selectedMask:
         drawSphere(drawer, point, 0.05, MASK_COLORS)
-    for point in spotPoints:
+    for point in selectedSpots:
         drawSphere(drawer, point, 0.05, SPOT_COLORS)
+    if hoveredPointId is not None:
+        groups = buildHighlightGroups(lines or ())
+        for line in groups.get(hoveredPointId, ()):
+            drawHighlightLine(drawer, line)
+
+
+def drawVehicle(vehicle, showMaskPoints, showSpotPoints, showGuides,
+                hoveredPointId=None):
+    geometry = getWorldGeometry(
+        vehicle, showGuides or hoveredPointId is not None)
+    if geometry is None:
+        return None
+    drawGeometry(geometry, showMaskPoints, showSpotPoints, showGuides,
+                 hoveredPointId)
+    return geometry

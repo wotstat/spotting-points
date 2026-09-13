@@ -1,5 +1,6 @@
-OPTION_NAMES = ('showMaskPoints', 'showSpotPoints', 'showGuides',
-                'allowTurretRotation')
+OPTION_NAMES = ('showMaskPoints', 'showSpotPoints', 'showUiPoints',
+                'showGuides', 'allowTurretRotation')
+UI_FRAME_INTERVAL = 1.0 / 30.0
 
 
 class DisplayOptions(object):
@@ -18,4 +19,10 @@ class DisplayOptions(object):
 
     def hasVisuals(self):
         return (self.showMaskPoints or self.showSpotPoints
-                or self.showGuides)
+                or self.showUiPoints or self.showGuides)
+
+    def drawInterval(self, hasHover):
+        if (self.showMaskPoints or self.showSpotPoints or self.showGuides
+                or hasHover):
+            return 0.0
+        return UI_FRAME_INTERVAL if self.showUiPoints else 0.0

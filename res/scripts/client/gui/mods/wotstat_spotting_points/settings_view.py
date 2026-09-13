@@ -14,6 +14,7 @@ LABELS = {
     'title': 'Габаритные и обзорные точки',
     'showMaskPoints': 'Отображать габаритные точки',
     'showSpotPoints': 'Отображать обзорные точки',
+    'showUiPoints': 'Отображать точки в UI',
     'showGuides': 'Отображать направляющие',
     'allowTurretRotation': 'Разрешить вращение башни мышью',
 }
@@ -66,6 +67,11 @@ def showSettings(controller):
     _loading = True
     app.loadView(SFViewLoadParams(VIEW_ALIAS))
     return True
+
+
+def updateDisplayedOptions(options):
+    if _window is not None:
+        _window.flashObject.as_setOptions(options)
 
 
 class SettingsWindow(AbstractWindowView):

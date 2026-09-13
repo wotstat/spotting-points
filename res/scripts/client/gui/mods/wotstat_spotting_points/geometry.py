@@ -113,3 +113,36 @@ def buildGeometry(hullBounds, turretBounds, hullOffset, turretOffset, gunOffset)
         LineGeometry([upper[1], upper[6]], 0x959595, None),
     ])
     return points, lines
+
+
+def _lineSegment(line, startIndex):
+    return LineGeometry(line.points[startIndex:startIndex + 2],
+                        line.color, line.backColor)
+
+
+def _faceLine(line, points):
+    return LineGeometry(points, line.color, line.backColor)
+
+
+def buildHighlightGroups(lines):
+    leftFace = _faceLine(lines[1], list(lines[1].points[:5]))
+    rightFace = _faceLine(
+        lines[2], list(lines[2].points) + [lines[2].points[0]])
+    frontFace = _faceLine(lines[1], [
+        lines[1].points[3], lines[1].points[2],
+        lines[2].points[2], lines[2].points[3], lines[1].points[3]])
+    rearFace = _faceLine(lines[1], [
+        lines[1].points[0], lines[1].points[1],
+        lines[2].points[1], lines[2].points[0], lines[1].points[0]])
+    frontCross = [_lineSegment(lines[5], 1), _lineSegment(lines[6], 2)]
+    rearCross = [_lineSegment(lines[5], 3), _lineSegment(lines[6], 0)]
+    groups = {
+        'rear': [rearFace] + rearCross,
+        'front': [frontFace] + frontCross,
+        'left': [leftFace] + list(lines[7:9]),
+        'right': [rightFace] + list(lines[8:10]),
+        'gunStatic': [lines[8]],
+        'top': [lines[0]],
+        'gunMoving': [lines[8]] + list(lines[13:]),
+    }
+    return groups

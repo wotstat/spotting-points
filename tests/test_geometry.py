@@ -108,6 +108,44 @@ class GeometryTests(unittest.TestCase):
                                   (0, 0.5, 0), (0, 1, 0), (0, 0, 0))
         self.assertEqual(points[5], (0, 5.5, 0))
 
+    def test_highlight_groups_only_include_semantic_guides(self):
+        from wotstat_spotting_points.geometry import (
+            buildGeometry, buildHighlightGroups)
+        _, lines = buildGeometry(((-2, 0, -4), (2, 2, 6)),
+                                 ((-1, 0, -1), (1, 1, 2)),
+                                 (0, 1, 0), (0, 2, 1), (0, 0.5, 0.8))
+
+        groups = buildHighlightGroups(lines)
+
+        self.assertEqual(len(groups['front']), 3)
+        self.assertEqual(groups['front'][0].points,
+                         [(-2, 1, 6), (-2, 3, 6),
+                          (2, 3, 6), (2, 1, 6), (-2, 1, 6)])
+        self.assertEqual(groups['front'][1].points,
+                         [(-2, 3, 6), (2, 1, 6)])
+        self.assertEqual(groups['front'][2].points,
+                         [(-2, 1, 6), (2, 3, 6)])
+        self.assertEqual(len(groups['rear']), 3)
+        self.assertEqual(len(groups['left']), 3)
+        self.assertEqual(groups['left'][1:], lines[7:9])
+        self.assertEqual(len(groups['right']), 3)
+        self.assertEqual(groups['right'][1:], lines[8:10])
+        self.assertEqual(groups['top'], [lines[0]])
+        self.assertEqual(groups['gunStatic'], [lines[8]])
+
+    def test_moving_gun_highlight_includes_dynamic_arc(self):
+        from wotstat_spotting_points.geometry import (
+            buildGeometry, buildHighlightGroups, LineGeometry)
+        _, lines = buildGeometry(((-2, 0, -4), (2, 2, 6)),
+                                 ((-1, 0, -1), (1, 1, 2)),
+                                 (0, 1, 0), (0, 2, 1), (0, 0.5, 0.8))
+        arc = LineGeometry([(0, 3.5, 1.8), (1, 3.5, 1.0)],
+                           0x959595, 0x646464)
+
+        groups = buildHighlightGroups(lines + [arc])
+
+        self.assertEqual(groups['gunMoving'], [lines[8], arc])
+
 
 if __name__ == '__main__':
     unittest.main()

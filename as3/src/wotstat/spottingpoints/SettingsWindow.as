@@ -7,13 +7,14 @@ package wotstat.spottingpoints {
         public var optionChanged:Function;
 
         private static const CONTENT_WIDTH:int = 420;
-        private static const CONTENT_HEIGHT:int = 174;
+        private static const CONTENT_HEIGHT:int = 210;
         private static const LEFT:int = 24;
         private static const FIRST_ROW:int = 18;
         private static const ROW_HEIGHT:int = 36;
         private static const OPTION_NAMES:Array = [
             "showMaskPoints",
             "showSpotPoints",
+            "showUiPoints",
             "showGuides",
             "allowTurretRotation"
         ];
@@ -47,9 +48,16 @@ package wotstat.spottingpoints {
             for each (var optionName:String in OPTION_NAMES) {
                 var box:CheckBox = boxes[optionName] as CheckBox;
                 box.label = labels[optionName];
+            }
+            as_setOptions(options);
+            visible = true;
+        }
+
+        public function as_setOptions(options:Object):void {
+            for each (var optionName:String in OPTION_NAMES) {
+                var box:CheckBox = boxes[optionName] as CheckBox;
                 box.selected = Boolean(options[optionName]);
             }
-            visible = true;
         }
 
         private function onOptionClick(event:ButtonEvent):void {

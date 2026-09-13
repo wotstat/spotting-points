@@ -15,10 +15,31 @@ class DisplayOptionsTests(unittest.TestCase):
         self.assertEqual(options.asDict(), {
             'showMaskPoints': False,
             'showSpotPoints': False,
+            'showUiPoints': False,
             'showGuides': False,
             'allowTurretRotation': False,
         })
         self.assertFalse(options.hasVisuals())
+
+    def test_ui_points_are_an_independent_visual(self):
+        from wotstat_spotting_points.options import DisplayOptions
+        options = DisplayOptions()
+
+        self.assertTrue(options.setValue('showUiPoints', True))
+        self.assertTrue(options.showUiPoints)
+        self.assertFalse(options.showMaskPoints)
+        self.assertFalse(options.showSpotPoints)
+        self.assertTrue(options.hasVisuals())
+
+    def test_ui_only_mode_uses_bounded_update_interval(self):
+        from wotstat_spotting_points.options import DisplayOptions
+        options = DisplayOptions()
+        options.showUiPoints = True
+
+        self.assertAlmostEqual(options.drawInterval(False), 1.0 / 30.0)
+        self.assertEqual(options.drawInterval(True), 0.0)
+        options.showMaskPoints = True
+        self.assertEqual(options.drawInterval(False), 0.0)
 
     def test_updates_visuals_and_rotation_independently(self):
         from wotstat_spotting_points.options import DisplayOptions
