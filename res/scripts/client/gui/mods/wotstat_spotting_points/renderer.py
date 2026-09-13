@@ -3,7 +3,7 @@ from Math import Matrix, Vector3
 from realm import CURRENT_REALM
 from vehicle_systems.tankStructure import TankPartIndexes, TankNodeNames
 
-from .geometry import buildGeometry, LineGeometry
+from .geometry import buildGeometry, LineGeometry, replacePoint, selectGeometry
 
 MASK_COLORS = (0xff3135, 0xab6d67)
 SPOT_COLORS = (0x00aaff, 0x5990bf)
@@ -58,23 +58,23 @@ def getWorldGeometry(vehicle):
     if gunJoint is None:
         return None
     movingPoint = Vector3(gunJoint.position)
-    maskPoints.append(movingPoint)
-    spotPoints = [maskPoints[5], movingPoint]
+    maskPoints = replacePoint(maskPoints, 4, movingPoint)
+    spotPoints = [maskPoints[5], maskPoints[4]]
     return maskPoints, spotPoints, worldLines
 
 
-def drawVehicle(vehicle):
+def drawVehicle(vehicle, showMaskPoints, showSpotPoints, showGuides):
     geometry = getWorldGeometry(vehicle)
     if geometry is None:
         return
     maskPoints, spotPoints, lines = geometry
+    maskPoints, spotPoints, lines = selectGeometry(
+        maskPoints, spotPoints, lines, showMaskPoints, showSpotPoints,
+        showGuides)
     drawer = DebugDrawer()
-    for points in lines:
-        drawLine(drawer, points)
-    # Shared points are blue: overlapping opaque spheres hide one another.
+    for line in lines:
+        drawLine(drawer, line)
     for point in maskPoints:
-        shared = any(point.distSqrTo(spot) < 0.000001 for spot in spotPoints)
-        if not shared:
-            drawSphere(drawer, point, 0.05, MASK_COLORS)
+        drawSphere(drawer, point, 0.05, MASK_COLORS)
     for point in spotPoints:
         drawSphere(drawer, point, 0.05, SPOT_COLORS)

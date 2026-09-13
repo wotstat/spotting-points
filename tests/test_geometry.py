@@ -8,6 +8,46 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'res',
 
 
 class GeometryTests(unittest.TestCase):
+    def test_select_geometry_keeps_visual_groups_independent(self):
+        from wotstat_spotting_points.geometry import selectGeometry
+        mask = [(0, 0, 0), (1, 0, 0)]
+        spots = [(1, 0, 0), (2, 0, 0)]
+        lines = ['guide']
+
+        self.assertEqual(selectGeometry(mask, spots, lines,
+                                        False, False, False),
+                         ([], [], []))
+        self.assertEqual(selectGeometry(mask, spots, lines,
+                                        True, False, False),
+                         (mask, [], []))
+        self.assertEqual(selectGeometry(mask, spots, lines,
+                                        False, True, False),
+                         ([], spots, []))
+        self.assertEqual(selectGeometry(mask, spots, lines,
+                                        False, False, True),
+                         ([], [], lines))
+
+    def test_select_geometry_draws_shared_point_once_as_observation(self):
+        from wotstat_spotting_points.geometry import selectGeometry
+        mask = [(0, 0, 0), (1, 0, 0)]
+        spots = [(1, 0, 0), (2, 0, 0)]
+
+        selectedMask, selectedSpots, _ = selectGeometry(
+            mask, spots, [], True, True, False)
+
+        self.assertEqual(selectedMask, [(0, 0, 0)])
+        self.assertEqual(selectedSpots, spots)
+
+    def test_replace_point_moves_gun_without_static_duplicate(self):
+        from wotstat_spotting_points.geometry import replacePoint
+        original = ['rear', 'front', 'left', 'right', 'static-gun', 'top']
+
+        replaced = replacePoint(original, 4, 'moving-gun')
+
+        self.assertEqual(replaced, ['rear', 'front', 'left', 'right',
+                                    'moving-gun', 'top'])
+        self.assertEqual(original[4], 'static-gun')
+
     def test_asymmetric_hull_and_component_offsets(self):
         from wotstat_spotting_points.geometry import buildGeometry
         points, lines = buildGeometry(((-2, 0, -4), (2, 2, 6)),

@@ -8,6 +8,30 @@ from collections import namedtuple
 LineGeometry = namedtuple('LineGeometry', 'points color backColor')
 
 
+def replacePoint(points, index, point):
+    result = list(points)
+    result[index] = point
+    return result
+
+
+def _pointsEqual(a, b):
+    if hasattr(a, 'distSqrTo'):
+        return a.distSqrTo(b) < 0.000001
+    return sum((a[i] - b[i]) ** 2 for i in range(3)) < 0.000001
+
+
+def selectGeometry(maskPoints, spotPoints, lines, showMaskPoints,
+                   showSpotPoints, showGuides):
+    selectedMask = list(maskPoints) if showMaskPoints else []
+    selectedSpots = list(spotPoints) if showSpotPoints else []
+    selectedLines = list(lines) if showGuides else []
+    if selectedMask and selectedSpots:
+        selectedMask = [point for point in selectedMask
+                        if not any(_pointsEqual(point, spot)
+                                   for spot in selectedSpots)]
+    return selectedMask, selectedSpots, selectedLines
+
+
 def bboxPoints(low, high):
     return [(low[0], low[1], low[2]), (low[0], high[1], low[2]),
             (low[0], high[1], high[2]), (low[0], low[1], high[2]),
