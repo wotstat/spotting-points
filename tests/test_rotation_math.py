@@ -9,6 +9,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'res',
 
 
 class RotationMathTests(unittest.TestCase):
+    def test_rotating_part_hit_ignores_procedural_attachments(self):
+        from wotstat_spotting_points.rotation_math import isRotatingPartHit
+
+        self.assertTrue(isRotatingPartHit([5, 4, 3], 3, 2, 3))
+        self.assertTrue(isRotatingPartHit([6, 2], 3, 2, 3))
+
+    def test_rotating_part_hit_stops_at_first_static_part(self):
+        from wotstat_spotting_points.rotation_math import isRotatingPartHit
+
+        self.assertFalse(isRotatingPartHit([6, 0, 3], 3, 2, 3))
+        self.assertFalse(isRotatingPartHit([6, 5], 3, 2, 3))
+
     def test_full_circle_yaw_is_normalized(self):
         from wotstat_spotting_points.rotation_math import nextAngles
         yaw, pitch = nextAngles(math.pi - 0.01, 0.0, -100.0, 0.0,

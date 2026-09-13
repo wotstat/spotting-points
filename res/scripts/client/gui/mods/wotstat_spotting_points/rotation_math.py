@@ -11,6 +11,14 @@ def normalizeAngle(value):
     return (value + math.pi) % (2.0 * math.pi) - math.pi
 
 
+def isRotatingPartHit(partIndices, maxStaticPartIndex, turretIndex, gunIndex):
+    for partIndex in partIndices:
+        if partIndex > maxStaticPartIndex:
+            continue
+        return partIndex in (turretIndex, gunIndex)
+    return False
+
+
 def nextAngles(yaw, pitch, dx, dy, yawLimits, pitchLimits,
                sensitivity=ROTATION_PER_PIXEL, changeYaw=True,
                changePitch=True):

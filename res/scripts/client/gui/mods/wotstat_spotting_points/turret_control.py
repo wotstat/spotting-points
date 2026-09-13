@@ -10,9 +10,10 @@ from gui.hangar_cameras.hangar_camera_common import CameraRelatedEvents
 from gun_rotation_shared import calcPitchLimitsFromDesc
 from helpers import dependency
 from skeletons.gui.turret_gun_angles import ITurretAndGunAngles
-from vehicle_systems.tankStructure import TankNodeNames, TankPartNames
+from vehicle_systems.tankStructure import (
+    TankNodeNames, TankPartIndexes, TankPartNames)
 
-from .rotation_math import nextAngles
+from .rotation_math import isRotatingPartHit, nextAngles
 
 log = logging.getLogger('WOTSTAT_SPOTTING_POINTS')
 
@@ -134,8 +135,11 @@ class TurretMouseControl(object):
         hits = collisions.collideAllWorld(start, end)
         if not hits:
             return False
-        partName = collisions.getPartName(hits[0][3])
-        return partName in (TankPartNames.TURRET, TankPartNames.GUN)
+        maxStaticPartIndex = getattr(
+            collisions, 'maxStaticPartIndex', TankPartIndexes.ALL[-1])
+        return isRotatingPartHit(
+            [hit[3] for hit in hits], maxStaticPartIndex,
+            TankPartIndexes.TURRET, TankPartIndexes.GUN)
 
     @staticmethod
     def _getGunNode(appearance):
