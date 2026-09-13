@@ -3,9 +3,11 @@
 Plain tuples keep these calculations independent of the native client modules.
 The moving gun observation point is added by the renderer.
 """
+import math
 from collections import namedtuple
 
 LineGeometry = namedtuple('LineGeometry', 'points color backColor')
+TURRET_ARC_STEP = math.radians(5.0)
 
 
 def addMovingGunPoint(maskPoints, spotPoints, point):
@@ -14,6 +16,37 @@ def addMovingGunPoint(maskPoints, spotPoints, point):
     resultMask.append(point)
     resultSpots.append(point)
     return resultMask, resultSpots
+
+
+def buildTurretArc(axisPoint, staticPoint, movingPoint):
+    startX = staticPoint[0] - axisPoint[0]
+    startZ = staticPoint[2] - axisPoint[2]
+    endX = movingPoint[0] - axisPoint[0]
+    endZ = movingPoint[2] - axisPoint[2]
+    radius = math.hypot(startX, startZ)
+    if radius < 0.000001 or math.hypot(endX, endZ) < 0.000001:
+        return []
+
+    startAngle = math.atan2(startX, startZ)
+    endAngle = math.atan2(endX, endZ)
+    turn = ((endAngle - startAngle + math.pi) % (2.0 * math.pi)
+            - math.pi)
+    if abs(turn) < 0.0001:
+        return []
+
+    segmentCount = max(1, int(math.ceil(abs(turn) / TURRET_ARC_STEP)))
+    points = []
+    for index in range(segmentCount + 1):
+        progress = float(index) / segmentCount
+        angle = startAngle + turn * progress
+        height = (staticPoint[1]
+                  + (movingPoint[1] - staticPoint[1]) * progress)
+        points.append((axisPoint[0] + math.sin(angle) * radius,
+                       height,
+                       axisPoint[2] + math.cos(angle) * radius))
+    points[0] = tuple(staticPoint[i] for i in range(3))
+    points[-1] = tuple(movingPoint[i] for i in range(3))
+    return points
 
 
 def _pointsEqual(a, b):

@@ -4,7 +4,8 @@ from realm import CURRENT_REALM
 from vehicle_systems.tankStructure import TankPartIndexes, TankNodeNames
 
 from .geometry import (
-    addMovingGunPoint, buildGeometry, LineGeometry, selectGeometry)
+    addMovingGunPoint, buildGeometry, buildTurretArc, LineGeometry,
+    selectGeometry)
 
 MASK_COLORS = (0xff3135, 0xab6d67)
 SPOT_COLORS = (0x00aaff, 0x5990bf)
@@ -59,6 +60,16 @@ def getWorldGeometry(vehicle):
     if gunJoint is None:
         return None
     movingPoint = Vector3(gunJoint.position)
+    inverseMatrix = Matrix(matrix)
+    inverseMatrix.invert()
+    movingPointLocal = inverseMatrix.applyPoint(movingPoint)
+    turretAxis = tuple(hullOffset[i] + turretOffset[i] for i in range(3))
+    arcPoints = buildTurretArc(turretAxis, points[4], movingPointLocal)
+    if arcPoints:
+        worldArc = [matrix.applyPoint(Vector3(p)) for p in arcPoints]
+        worldArc[0] = maskPoints[4]
+        worldArc[-1] = movingPoint
+        worldLines.append(LineGeometry(worldArc, 0x959595, 0x646464))
     maskPoints, spotPoints = addMovingGunPoint(
         maskPoints, [maskPoints[5]], movingPoint)
     return maskPoints, spotPoints, worldLines

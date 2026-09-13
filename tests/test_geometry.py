@@ -50,6 +50,20 @@ class GeometryTests(unittest.TestCase):
         self.assertEqual(spots, ['top', 'moving-gun'])
         self.assertEqual(staticMask[4], 'static-gun')
 
+    def test_turret_arc_connects_mount_points_at_constant_radius(self):
+        from wotstat_spotting_points.geometry import buildTurretArc
+
+        points = buildTurretArc((1, 2, 3), (1, 3, 5), (3, 3, 3))
+
+        self.assertEqual(points[0], (1, 3, 5))
+        self.assertEqual(points[-1], (3, 3, 3))
+        self.assertGreater(len(points), 2)
+        for point in points:
+            radiusSquared = ((point[0] - 1) ** 2
+                             + (point[2] - 3) ** 2)
+            self.assertAlmostEqual(radiusSquared, 4.0, places=6)
+            self.assertAlmostEqual(point[1], 3.0, places=6)
+
     def test_asymmetric_hull_and_component_offsets(self):
         from wotstat_spotting_points.geometry import buildGeometry
         points, lines = buildGeometry(((-2, 0, -4), (2, 2, 6)),

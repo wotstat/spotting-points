@@ -24,7 +24,8 @@
 дескриптором машины. Перетаскивание, начатое на корпусе или пустом месте,
 по-прежнему управляет камерой. Статичная габаритная точка остаётся в месте
 крепления орудия при нулевом повороте башни, а отдельная совмещённая
-обзорно-габаритная точка следует за орудием. Направляющие остаются неподвижными.
+обзорно-габаритная точка следует за орудием. Остальные направляющие остаются
+неподвижными; при повороте башни между этими двумя точками отображается дуга.
 
 Красные сферы — габаритные точки, голубые — обзорные. Белые и серые линии —
 BBox и направляющие SpottingUtil (`showBBoxes` + `showBBoxAlign`).
@@ -33,12 +34,14 @@ BBox и направляющие SpottingUtil (`showBBoxes` + `showBBoxAlign`).
 Нужен [ModsList API](https://docs.wotstat.info/guide/integrations/mods-list/).
 Мод не подменяет штатные файлы или общие обработчики: у окна собственные alias
 и SWF, а ограничение камеры активно только во время целевого drag-жеста.
+В EU-просмотре брони мышь остаётся под исключительным управлением штатного
+Armor Inspector; обработчик вращения этого мода там не запускается.
 
 ## Установка
 
-- «Мир танков»: `dist/wotstat.spotting-points_0.2.3.mtmod` →
+- «Мир танков»: `dist/wotstat.spotting-points_0.2.5.mtmod` →
   `mods/<версия игры>/`.
-- World of Tanks: `dist/wotstat.spotting-points_0.2.3.wotmod` →
+- World of Tanks: `dist/wotstat.spotting-points_0.2.5.wotmod` →
   `mods/<версия игры>/`.
 
 Пакет устанавливайте при закрытой игре. При обновлении удалите только прежний
@@ -50,7 +53,7 @@ BBox и направляющие SpottingUtil (`showBBoxes` + `showBBoxAlign`).
 в `as3/libs`. Файлы SWC не коммитятся и не попадают в мод.
 
 ```powershell
-./build.ps1 -Version 0.2.3 -Python C:/Python27/python.exe
+./build.ps1 -Version 0.2.5 -Python C:/Python27/python.exe
 C:/Python27/python.exe -B -m unittest discover -s tests
 ```
 

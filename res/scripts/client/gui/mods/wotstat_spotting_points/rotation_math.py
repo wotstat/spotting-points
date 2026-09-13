@@ -13,7 +13,8 @@ def normalizeAngle(value):
 
 def findRotatingPartHit(partHits, maxStaticPartIndex, turretIndex, gunIndex):
     for partIndex, distance in partHits:
-        if partIndex > maxStaticPartIndex:
+        if (partIndex > maxStaticPartIndex
+                or partIndex > max(turretIndex, gunIndex)):
             continue
         if partIndex in (turretIndex, gunIndex):
             return partIndex, distance

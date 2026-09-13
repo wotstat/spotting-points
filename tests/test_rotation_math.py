@@ -19,6 +19,16 @@ class RotationMathTests(unittest.TestCase):
             [(6, 8.0), (2, 11.25)], 3, 2, 3),
             (2, 11.25))
 
+    def test_rotating_hit_skips_styled_parts_inside_static_collision_range(self):
+        from wotstat_spotting_points.rotation_math import findRotatingPartHit
+
+        self.assertEqual(findRotatingPartHit(
+            [(6, 9.575), (2, 10.353), (2, 11.346)], 7, 2, 3),
+            (2, 10.353))
+        self.assertEqual(findRotatingPartHit(
+            [(6, 8.387), (5, 9.688), (3, 10.958)], 7, 2, 3),
+            (3, 10.958))
+
     def test_turret_and_gun_drags_use_every_available_axis(self):
         from wotstat_spotting_points.rotation_math import (
             canStartPartDrag, getDragAxes)

@@ -16,6 +16,13 @@ from vehicle_systems.tankStructure import (
 from .rotation_math import (
     canStartPartDrag, findRotatingPartHit, getDragAxes, nextAngles)
 
+try:
+    from gui.Scaleform.lobby_entry import getLobbyStateMachine
+    from gui.impl.lobby.vehicle_hub.states import ArmorState
+except ImportError:
+    getLobbyStateMachine = None
+    ArmorState = None
+
 log = logging.getLogger('WOTSTAT_SPOTTING_POINTS')
 
 
@@ -58,6 +65,9 @@ class TurretMouseControl(object):
     def _onMouseDown(self):
         if not self._enabled or not self._hangar.spaceInited:
             return
+        if self._isArmorViewActive():
+            self.cancelDrag()
+            return
         if not self._hangar.isCursorOver3DScene:
             return
         vehicle = self._hangar.getVehicleEntity()
@@ -91,6 +101,9 @@ class TurretMouseControl(object):
 
     def _restrictMouseMove(self, event):
         if self._dragVehicle is None:
+            return True
+        if self._isArmorViewActive():
+            self.cancelDrag()
             return True
         try:
             self._rotate(event.ctx)
@@ -140,6 +153,16 @@ class TurretMouseControl(object):
                 and getattr(vehicle, 'typeDescriptor', None) is not None
                 and vehicle.appearance.turretRotator is not None
                 and vehicle.appearance.collisions is not None)
+
+    @staticmethod
+    def _isArmorViewActive():
+        if getLobbyStateMachine is None or ArmorState is None:
+            return False
+        stateMachine = getLobbyStateMachine()
+        if stateMachine is None:
+            return False
+        armorState = stateMachine.getStateByCls(ArmorState)
+        return armorState is not None and armorState.isEntered()
 
     @staticmethod
     def _getRotatingPartHit(vehicle):
