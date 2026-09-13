@@ -29,6 +29,8 @@ for directory, _, names in os.walk(os.path.join(staging, 'res')):
         if name.endswith('.py'):
             py_compile.compile(path, cfile=path + 'c', dfile=relative, doraise=True)
             runtimeFiles.append(relative + 'c')
+        elif name.endswith('.pyc'):
+            continue
         else:
             runtimeFiles.append(relative)
 for extension in ('mtmod', 'wotmod'):

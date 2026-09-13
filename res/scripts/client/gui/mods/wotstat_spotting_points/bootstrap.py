@@ -2,6 +2,7 @@
 import logging
 
 from .controller import SpottingPointsController
+from .settings_view import registerSettingsView, showSettings, unregisterSettingsView
 
 MOD_ID = 'wotstat.spotting-points'
 log = logging.getLogger('WOTSTAT_SPOTTING_POINTS')
@@ -19,13 +20,18 @@ def init(version):
         log.error('ModsList API is required to enable Spotting Points')
         return
     instance = SpottingPointsController()
+    viewRegistered = False
     try:
+        registerSettingsView()
+        viewRegistered = True
         g_modsListApi.addModification(
-            id=MOD_ID, name='Включить/выключить габаритные точки',
-            description='Габаритные и обзорные точки танка в ангаре',
+            id=MOD_ID, name='Настройки габаритных и обзорных точек',
+            description='Открыть окно настроек точек, направляющих и башни',
             icon='', enabled=True, login=False, lobby=True,
-            callback=instance.toggle)
+            callback=lambda: showSettings(instance))
     except Exception:
+        if viewRegistered:
+            unregisterSettingsView()
         instance.destroy()
         raise
     controller = instance
@@ -35,9 +41,16 @@ def init(version):
 
 def fini():
     global controller, _modsList
-    if controller is None:
-        return
-    controller.destroy()
+    instance = controller
+    modsList = _modsList
     controller = None
-    _modsList.removeModification(MOD_ID)
     _modsList = None
+    try:
+        if modsList is not None:
+            modsList.removeModification(MOD_ID)
+    finally:
+        try:
+            unregisterSettingsView()
+        finally:
+            if instance is not None:
+                instance.destroy()
