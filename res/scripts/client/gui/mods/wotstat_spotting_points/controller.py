@@ -9,7 +9,7 @@ from skeletons.gui.shared.utils import IHangarSpace
 from .options import DisplayOptions
 from .marker_logic import buildMarkerData
 from .marker_view import hideMarkerView, showMarkerView
-from .renderer import drawGeometry, getWorldGeometry
+from .renderer import drawGeometry, getLayoutBounds, getWorldGeometry
 from .settings_view import updateDisplayedOptions
 from .turret_control import TurretMouseControl
 
@@ -157,10 +157,11 @@ class SpottingPointsController(object):
             return
         maskPoints, spotPoints, _ = geometry
         markers = buildMarkerData(maskPoints, spotPoints)
+        layoutBounds = getLayoutBounds(vehicle)
         active = self._markerView.updateSceneActive()
         if active:
             self._markerView.updateMarkers(
-                markers, vehicle, self._hoveredPointId)
+                markers, vehicle, self._hoveredPointId, layoutBounds)
         self._updateMarkerHover(active)
 
     def _updateMarkerHover(self, markerSceneActive):

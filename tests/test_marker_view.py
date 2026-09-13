@@ -69,6 +69,7 @@ class FakeNativeMarker(object):
 class FakeFlash(object):
     def __init__(self):
         self.created = []
+        self.layoutCreated = []
         self.updated = []
         self.removed = []
 
@@ -79,6 +80,11 @@ class FakeFlash(object):
 
     def as_updateMarkers(self, data, hoveredPointId):
         self.updated.append((data, hoveredPointId))
+
+    def as_createLayoutAnchor(self, anchorId):
+        marker = object()
+        self.layoutCreated.append((anchorId, marker))
+        return marker
 
     def as_removeMarker(self, pointId):
         self.removed.append(pointId)
@@ -126,14 +132,55 @@ def _loadMarkerViewModule(currentRealm='RU'):
     _module('skeletons.gui.app_loader', IAppLoader=object)
     _module('skeletons.gui.impl', IGuiLoader=object)
     _module('vehicle_systems')
-    _module('vehicle_systems.tankStructure', TankNodeNames=Bag(
-        GUN_JOINT='gunJoint'))
+    _module('vehicle_systems.tankStructure',
+            TankNodeNames=Bag(GUN_JOINT='gunJoint'),
+            TankPartNames=Bag(HULL='hull', TURRET='turret'))
     sys.modules.pop('wotstat_spotting_points.marker_view', None)
     module = importlib.import_module('wotstat_spotting_points.marker_view')
     return module, nativeMarkers
 
 
 class MarkerViewTests(unittest.TestCase):
+    def test_layout_bounds_use_live_hull_and_turret_providers(self):
+        markerView, nativeMarkers = _loadMarkerViewModule()
+        from wotstat_spotting_points.geometry import LayoutBounds
+        flash = FakeFlash()
+        hullProvider = FakeMatrix()
+        hullProvider.translation = (10.0, 1.0, 20.0)
+        turretProvider = FakeMatrix()
+        turretProvider.yaw = math.pi / 2.0
+        turretProvider.translation = (10.0, 4.0, 20.0)
+        partProviders = {'hull': hullProvider, 'turret': turretProvider}
+        vehicle = Bag(model=Bag(node=lambda name: partProviders[name]))
+        view = object.__new__(markerView.MarkerOverlayView)
+        view._ready = True
+        view._sceneActive = True
+        view._nativeMarkers = {}
+        view._layoutMarkers = {}
+        view.flashObject = flash
+        layoutBounds = LayoutBounds(
+            [(-2, 0, -3), (-2, 2, -3), (-2, 2, 3), (-2, 0, 3),
+             (2, 0, -3), (2, 2, -3), (2, 2, 3), (2, 0, 3)],
+            [(-1, 0, -1), (-1, 1, -1), (-1, 1, 1), (-1, 0, 1),
+             (1, 0, -1), (1, 1, -1), (1, 1, 1), (1, 0, 1)])
+
+        view.updateMarkers([], vehicle, None, layoutBounds)
+
+        self.assertEqual(len(nativeMarkers), 16)
+        self.assertEqual([item[0] for item in flash.layoutCreated],
+                         ['hull%d' % index for index in range(8)] +
+                         ['turret%d' % index for index in range(8)])
+        self.assertIs(view._layoutMarkers['hull0'].provider.b,
+                      hullProvider)
+        self.assertIs(view._layoutMarkers['turret0'].provider.b,
+                      turretProvider)
+        translated = view._layoutMarkers['turret6'].provider.applyToOrigin()
+        expected = turretProvider.applyPoint(layoutBounds.turret[6])
+        for actual, wanted in zip(translated, expected):
+            self.assertAlmostEqual(actual, wanted)
+        self.assertTrue(all(marker.active == [True]
+                            for marker in nativeMarkers))
+
     def test_native_markers_follow_vehicle_and_gun_matrix_providers(self):
         markerView, nativeMarkers = _loadMarkerViewModule()
         from wotstat_spotting_points.marker_logic import MarkerData
@@ -148,6 +195,7 @@ class MarkerViewTests(unittest.TestCase):
         view._ready = True
         view._sceneActive = True
         view._nativeMarkers = {}
+        view._layoutMarkers = {}
         view.flashObject = flash
         markers = [
             MarkerData('front', (15.0, 0.0, 20.0), u'Передняя'),

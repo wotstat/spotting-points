@@ -9,7 +9,7 @@ from gui.Scaleform.framework.managers.loaders import SFViewLoadParams
 from helpers import dependency
 from skeletons.gui.app_loader import IAppLoader
 from skeletons.gui.impl import IGuiLoader
-from vehicle_systems.tankStructure import TankNodeNames
+from vehicle_systems.tankStructure import TankNodeNames, TankPartNames
 
 from .marker_logic import buildOverlayData, isOverlaySceneActive
 
@@ -64,6 +64,15 @@ def _createMarkerProvider(marker, vehicle):
     provider = MatrixProduct()
     provider.a = localMatrix
     provider.b = vehicle.matrix
+    return provider
+
+
+def _createPartMarkerProvider(point, partProvider):
+    localMatrix = Matrix()
+    localMatrix.setTranslate(point)
+    provider = MatrixProduct()
+    provider.a = localMatrix
+    provider.b = partProvider
     return provider
 
 
@@ -126,6 +135,7 @@ class MarkerOverlayView(View):
         self._windowsManager = None
         self._sceneActive = False
         self._nativeMarkers = {}
+        self._layoutMarkers = {}
 
     def _populate(self):
         global _view, _loading
@@ -142,9 +152,17 @@ class MarkerOverlayView(View):
         self._refreshSceneActive()
         self._controller.attachMarkerView(self)
 
-    def updateMarkers(self, markers, vehicle, hoveredPointId):
+    def updateMarkers(self, markers, vehicle, hoveredPointId,
+                      layoutBounds=None):
         if not self._ready:
             return
+        if layoutBounds is not None:
+            self._createLayoutMarkers(
+                'hull', layoutBounds.hull,
+                vehicle.model.node(TankPartNames.HULL))
+            self._createLayoutMarkers(
+                'turret', layoutBounds.turret,
+                vehicle.model.node(TankPartNames.TURRET))
         seen = set()
         for marker in markers:
             seen.add(marker.id)
@@ -162,6 +180,20 @@ class MarkerOverlayView(View):
                 self._removeMarker(pointId)
         self.flashObject.as_updateMarkers(
             buildOverlayData(markers), hoveredPointId)
+
+    def _createLayoutMarkers(self, prefix, points, partProvider):
+        if partProvider is None:
+            return
+        for index, point in enumerate(points):
+            anchorId = '%s%d' % (prefix, index)
+            if anchorId in self._layoutMarkers:
+                continue
+            flashMarker = self.flashObject.as_createLayoutAnchor(anchorId)
+            nativeMarker = _createNativeMarker()
+            nativeMarker.setMarker(
+                flashMarker, _createPartMarkerProvider(point, partProvider))
+            nativeMarker.markerSetActive(self._sceneActive)
+            self._layoutMarkers[anchorId] = nativeMarker
 
     def updateSceneActive(self):
         return self._ready and self._sceneActive
@@ -184,6 +216,8 @@ class MarkerOverlayView(View):
             self.flashObject.as_setActive(active)
             for marker in self._nativeMarkers.values():
                 marker.markerSetActive(active)
+            for marker in self._layoutMarkers.values():
+                marker.markerSetActive(active)
 
     def hitTest(self, cursorX, cursorY):
         if not self._ready:
@@ -196,6 +230,9 @@ class MarkerOverlayView(View):
             return
         for pointId in tuple(self._nativeMarkers):
             self._removeMarker(pointId)
+        for anchorId in tuple(self._layoutMarkers):
+            marker = self._layoutMarkers.pop(anchorId)
+            marker.markerSetActive(False)
         self.flashObject.as_clearMarkers()
 
     def _removeMarker(self, pointId):
@@ -216,6 +253,7 @@ class MarkerOverlayView(View):
             self._windowsManager = None
         self._sceneActive = False
         self._nativeMarkers = None
+        self._layoutMarkers = None
         if _view is self:
             _view = None
         _loading = False

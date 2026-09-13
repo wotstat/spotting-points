@@ -80,6 +80,7 @@ def _loadControllerModule():
     _module('wotstat_spotting_points.renderer',
             drawVehicle=lambda vehicle, *args: ('geometry',),
             drawGeometry=lambda geometry, *args: None,
+            getLayoutBounds=lambda vehicle: None,
             getWorldGeometry=lambda vehicle, includeLines=True: ('geometry',))
     _module('wotstat_spotting_points.turret_control',
             TurretMouseControl=object)

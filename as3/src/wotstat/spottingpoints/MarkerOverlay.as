@@ -1,5 +1,6 @@
 package wotstat.spottingpoints {
     import flash.display.DisplayObject;
+    import flash.display.Sprite;
     import flash.events.Event;
     import flash.geom.Point;
     import flash.utils.Dictionary;
@@ -11,6 +12,7 @@ package wotstat.spottingpoints {
         private static const SCREEN_MARGIN:Number = 8;
 
         private var markers:Dictionary = new Dictionary();
+        private var layoutAnchors:Dictionary = new Dictionary();
         private var active:Boolean = true;
 
         public function MarkerOverlay() {
@@ -39,6 +41,20 @@ package wotstat.spottingpoints {
             markers[id] = marker;
             addChild(marker);
             return marker;
+        }
+
+        public function as_createLayoutAnchor(id:String):DisplayObject {
+            var existing:DisplayObject = layoutAnchors[id] as DisplayObject;
+            if (existing != null) {
+                return existing;
+            }
+            var anchor:Sprite = new Sprite();
+            anchor.alpha = 0;
+            anchor.mouseEnabled = false;
+            anchor.mouseChildren = false;
+            layoutAnchors[id] = anchor;
+            addChild(anchor);
+            return anchor;
         }
 
         public function as_updateMarkers(data:Array,
@@ -80,6 +96,10 @@ package wotstat.spottingpoints {
         public function as_clearMarkers():void {
             for (var key:Object in markers) {
                 removeMarker(String(key));
+            }
+            for (key in layoutAnchors) {
+                removeChild(layoutAnchors[key] as DisplayObject);
+                delete layoutAnchors[key];
             }
         }
 
@@ -289,6 +309,7 @@ package wotstat.spottingpoints {
 
         override protected function onDispose():void {
             markers = null;
+            layoutAnchors = null;
             super.onDispose();
         }
     }
