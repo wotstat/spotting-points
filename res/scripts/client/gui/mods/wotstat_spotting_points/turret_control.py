@@ -4,6 +4,7 @@ import BigWorld
 import GUI
 import math_utils
 from AvatarInputHandler import cameras
+from Math import Matrix
 from gui.shared import EVENT_BUS_SCOPE, g_eventBus
 from gui.shared.event_bus import EventPriority
 from gui.hangar_cameras.hangar_camera_common import CameraRelatedEvents
@@ -13,7 +14,9 @@ from skeletons.gui.turret_gun_angles import ITurretAndGunAngles
 from vehicle_systems.tankStructure import (
     TankNodeNames, TankPartIndexes, TankPartNames)
 
-from .rotation_math import isRotatingPartHit, nextAngles
+from .rotation_math import (
+    canStartPartDrag, filterDragDeltas, findRotatingPartHit, getDragAxes,
+    nextAngles)
 
 log = logging.getLogger('WOTSTAT_SPOTTING_POINTS')
 
@@ -24,6 +27,9 @@ class TurretMouseControl(object):
         self._angles = dependency.instance(ITurretAndGunAngles)
         self._enabled = False
         self._dragVehicle = None
+        self._dragPart = None
+        self._gunMultiplier = 1.0
+        self._turretMultiplier = 1.0
         self._restrictionAdded = False
 
     def setEnabled(self, enabled):
@@ -43,6 +49,9 @@ class TurretMouseControl(object):
 
     def cancelDrag(self):
         self._dragVehicle = None
+        self._dragPart = None
+        self._gunMultiplier = 1.0
+        self._turretMultiplier = 1.0
         if self._restrictionAdded:
             g_eventBus.removeRestriction(
                 CameraRelatedEvents.LOBBY_VIEW_MOUSE_MOVE,
@@ -58,12 +67,22 @@ class TurretMouseControl(object):
         if not self._hangar.isCursorOver3DScene:
             return
         vehicle = self._hangar.getVehicleEntity()
-        if not self._isReady(vehicle) or not self._hitIsTurretOrGun(vehicle):
+        if not self._isReady(vehicle):
             return
+        hit = self._getRotatingPartHit(vehicle)
+        if hit is None:
+            return
+        partIndex, hitDistance = hit
         gun = vehicle.typeDescriptor.gun
-        if gun.staticTurretYaw is not None and gun.staticPitch is not None:
+        canRotateYaw = gun.staticTurretYaw is None
+        canRotatePitch = gun.staticPitch is None
+        if not canStartPartDrag(
+                partIndex, TankPartIndexes.TURRET, TankPartIndexes.GUN,
+                canRotateYaw, canRotatePitch):
             return
         self._dragVehicle = vehicle
+        self._dragPart = partIndex
+        self._updateInversion(vehicle, hitDistance)
         if not self._restrictionAdded:
             g_eventBus.addRestriction(
                 CameraRelatedEvents.LOBBY_VIEW_MOUSE_MOVE,
@@ -101,21 +120,35 @@ class TurretMouseControl(object):
         dy = float(ctx.get('dy', 0.0) or 0.0)
         canRotateYaw = gun.staticTurretYaw is None
         canRotatePitch = gun.staticPitch is None
-        temporaryYaw, _ = nextAngles(
-            yaw, pitch, dx, 0.0, gun.turretYawLimits, (-1000.0, 1000.0),
-            changeYaw=canRotateYaw, changePitch=False)
-        pitchLimits = calcPitchLimitsFromDesc(
-            temporaryYaw, gun.pitchLimits,
-            descriptor.hull.turretPitches[0],
-            descriptor.turret.gunJointPitch)
-        nextYaw, nextPitch = nextAngles(
-            yaw, pitch, dx, dy, gun.turretYawLimits, pitchLimits,
-            changeYaw=canRotateYaw, changePitch=canRotatePitch)
-        if canRotateYaw:
+        rotateYaw, rotatePitch = getDragAxes(
+            self._dragPart, TankPartIndexes.TURRET, TankPartIndexes.GUN,
+            canRotateYaw, canRotatePitch)
+        dx, dy = filterDragDeltas(dx, dy, rotateYaw, rotatePitch)
+        nextYaw = yaw
+        nextPitch = pitch
+        yawChanged = dx != 0.0
+        applyPitch = False
+        if yawChanged:
+            nextYaw, _ = nextAngles(
+                yaw, pitch, dx, 0.0, gun.turretYawLimits,
+                (-1000.0, 1000.0), changePitch=False,
+                yawMultiplier=self._turretMultiplier)
             appearance.turretRotator.start(nextYaw, 0.0)
-        if canRotatePitch:
+            applyPitch = (self._dragPart == TankPartIndexes.TURRET
+                          and canRotatePitch)
+        if dy != 0.0:
+            applyPitch = True
+        if applyPitch:
+            pitchLimits = calcPitchLimitsFromDesc(
+                nextYaw, gun.pitchLimits,
+                descriptor.hull.turretPitches[0],
+                descriptor.turret.gunJointPitch)
+            _, nextPitch = nextAngles(
+                nextYaw, pitch, 0.0, dy, gun.turretYawLimits, pitchLimits,
+                changeYaw=False, pitchMultiplier=self._gunMultiplier)
             self._setGunPitch(appearance, nextPitch)
-        self._angles.set(gunPitch=nextPitch, turretYaw=nextYaw)
+        if yawChanged or applyPitch:
+            self._angles.set(gunPitch=nextPitch, turretYaw=nextYaw)
 
     @staticmethod
     def _isReady(vehicle):
@@ -126,7 +159,7 @@ class TurretMouseControl(object):
                 and vehicle.appearance.collisions is not None)
 
     @staticmethod
-    def _hitIsTurretOrGun(vehicle):
+    def _getRotatingPartHit(vehicle):
         cursor = GUI.mcursor().position
         ray, start = cameras.getWorldRayAndPoint(cursor.x, cursor.y)
         ray.normalise()
@@ -134,12 +167,37 @@ class TurretMouseControl(object):
         collisions = vehicle.appearance.collisions
         hits = collisions.collideAllWorld(start, end)
         if not hits:
-            return False
+            return None
         maxStaticPartIndex = getattr(
             collisions, 'maxStaticPartIndex', TankPartIndexes.ALL[-1])
-        return isRotatingPartHit(
-            [hit[3] for hit in hits], maxStaticPartIndex,
+        return findRotatingPartHit(
+            [(hit[3], hit[0]) for hit in hits], maxStaticPartIndex,
             TankPartIndexes.TURRET, TankPartIndexes.GUN)
+
+    def _updateInversion(self, vehicle, hitDistance):
+        cursor = GUI.mcursor().position
+        ray, start = cameras.getWorldRayAndPoint(cursor.x, cursor.y)
+        ray.normalise()
+        point = start + ray.scale(hitDistance)
+        descriptor = vehicle.typeDescriptor
+        appearance = vehicle.appearance
+        turretOffset = (descriptor.hull.turretPositions[0]
+                        + descriptor.chassis.hullPosition)
+        if self._dragPart == TankPartIndexes.GUN:
+            turretMatrix = Matrix()
+            turretMatrix.setRotateY(appearance.turretRotator.turretYaw)
+            turretMatrix.translation = turretOffset
+            turretMatrix.postMultiply(vehicle.model.matrix)
+            gunMatrix = Matrix()
+            gunMatrix.setRotateX(self._getGunPitch(appearance))
+            gunMatrix.postMultiply(turretMatrix)
+            gunMatrix.invert()
+            gunLocalPoint = gunMatrix.applyPoint(point)
+            self._gunMultiplier = -1.0 if gunLocalPoint.z < 0.0 else 1.0
+        turretCenter = vehicle.model.position + turretOffset
+        turretCenter.y = point.y
+        self._turretMultiplier = (
+            -1.0 if (turretCenter - start).length < hitDistance else 1.0)
 
     @staticmethod
     def _getGunNode(appearance):

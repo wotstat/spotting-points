@@ -76,14 +76,17 @@ vehicle collision component. A drag beginning on the hull or empty hangar keeps
 the normal camera behavior.
 
 During an active turret drag, a high-priority EventBus restriction consumes
-only `CameraRelatedEvents.LOBBY_VIEW_MOUSE_MOVE`. It applies the event's `dx`
-to turret yaw and `dy` to gun pitch, then returns `False` so the same movement
-does not also rotate the camera. At every other time it returns `True`. This
-avoids replacing `LobbyView.moveSpace`, the global input handler, or another
-mod's listener.
+only `CameraRelatedEvents.LOBBY_VIEW_MOUSE_MOVE`. A turret hit applies only
+`dx` to turret yaw; a gun hit applies `dx` to turret yaw and `dy` to gun pitch.
+At capture time the controller calculates the same gun and turret direction
+multipliers as the EU armor viewer from the hit distance and local hit side.
+It then returns `False` so the same movement does not also rotate the camera.
+At every other time it returns `True`. This avoids replacing
+`LobbyView.moveSpace`, the global input handler, or another mod's listener.
 
-Yaw uses `appearance.turretRotator.start(..., 0.0)`. Full-circle turrets are
-normalized; limited-arc guns are clamped to `gun.turretYawLimits`. Pitch is
+Yaw uses `appearance.turretRotator.start(..., 0.0)`. Full-circle turrets use
+the EU armor viewer's `[0, 2*pi)` range; limited-arc guns are clamped to
+`gun.turretYawLimits`. Pitch is
 clamped with `gun_rotation_shared.calcPitchLimitsFromDesc`, including the
 current yaw, hull turret pitch, and gun-joint pitch. Vehicles with a static
 turret or static gun keep that axis fixed. The public hangar turret/gun angle
@@ -130,8 +133,8 @@ WotStat REPL 1.4.1 MCP cover:
 - the hangar camera still moves when dragging outside the window/turret;
 - every checkbox updates its visual or input behavior immediately;
 - all four options start disabled after client restart;
-- a drag beginning on the turret or gun changes yaw and pitch while a hull drag
-  rotates the camera normally;
+- a drag beginning on the turret changes only yaw, a gun drag changes yaw and
+  pitch, and a hull drag rotates the camera normally;
 - yaw and pitch stop at the descriptor limits;
 - the combined gun point follows the moved gun while guides remain fixed;
 - closing/reopening the window keeps session state;
