@@ -1,0 +1,57 @@
+import os
+import sys
+import unittest
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'res',
+                              'scripts', 'client', 'gui', 'mods'))
+
+
+class GeometryTests(unittest.TestCase):
+    def test_asymmetric_hull_and_component_offsets(self):
+        from wotstat_spotting_points.geometry import buildGeometry
+        points, lines = buildGeometry(((-2, 0, -4), (2, 2, 6)),
+                                     ((-1, 0, -1), (1, 1, 2)),
+                                     (0, 1, 0), (0, 2, 1), (0, 0.5, 0.8))
+        self.assertEqual(points[:4], [(0, 2, -4), (0, 2, 6),
+                                     (-2, 3.5, 1), (2, 3.5, 1)])
+        self.assertEqual(points[4], (0, 3.5, 1.8))
+        self.assertEqual(points[5], (0, 4, 0))
+        self.assertTrue(any(points[2] in line.points for line in lines))
+
+    def test_bbox_and_alignment_match_reference(self):
+        from wotstat_spotting_points.geometry import buildGeometry
+        _, lines = buildGeometry(((-2, 0, -4), (2, 2, 6)),
+                                 ((-1, 0, -1), (1, 1, 2)),
+                                 (0, 1, 0), (0, 2, 1), (0, 0.5, 0.8))
+        self.assertEqual(len(lines), 13)
+        self.assertEqual([line.color for line in lines], [0xffffff] * 5 + [0x959595] * 8)
+        self.assertEqual([line.backColor for line in lines], [None] * 8 + [0x646464] + [None] * 4)
+        self.assertEqual(lines[0].points,
+                         [(-2, 4, 6), (2, 4, 6), (2, 4, -4), (-2, 4, -4), (-2, 4, 6)])
+        # All 12 hull edges, with no mid-height rectangle from the old renderer.
+        edges = set(frozenset((a, b)) for line in lines[1:5]
+                    for a, b in zip(line.points, line.points[1:]))
+        corners = [(x, y, z) for x in (-2, 2) for y in (1, 3) for z in (-4, 6)]
+        expectedEdges = set(frozenset((a, b)) for a in corners for b in corners
+                            if sum(a[i] != b[i] for i in range(3)) == 1)
+        self.assertEqual(edges, expectedEdges)
+        self.assertEqual(lines[5].points, [(-2, 1, -4), (-2, 3, 6), (2, 1, 6), (2, 3, -4), (-2, 1, -4)])
+        self.assertEqual(lines[6].points, [(2, 1, -4), (-2, 3, -4), (-2, 1, 6), (2, 3, 6), (2, 1, -4)])
+        self.assertEqual(lines[7].points, [(-2, 2, 1), (-2, 3.5, 1), (-2, 3.5, 1.8)])
+        self.assertEqual(lines[8].points, [(-2, 3.5, 1.8), (2, 3.5, 1.8)])
+        self.assertEqual(lines[9].points, [(2, 3.5, 1.8), (2, 3.5, 1), (2, 2, 1)])
+        self.assertEqual(lines[10].points, [(0, 4, 1), (0, 4, 0), (0, 0, 0)])
+        self.assertEqual(lines[11].points, [(-2, 4, 6), (2, 4, -4)])
+        self.assertEqual(lines[12].points, [(-2, 4, -4), (2, 4, 6)])
+
+    def test_tall_hull_sets_top_above_short_turret(self):
+        from wotstat_spotting_points.geometry import buildGeometry
+        points, _ = buildGeometry(((-1, 0, -1), (1, 5, 1)),
+                                  ((-1, 0, -1), (1, 1, 1)),
+                                  (0, 0.5, 0), (0, 1, 0), (0, 0, 0))
+        self.assertEqual(points[5], (0, 5.5, 0))
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,0 +1,5 @@
+.build/
+.local/
+dist/
+*.pyc
+__pycache__/
