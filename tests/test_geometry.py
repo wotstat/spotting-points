@@ -8,6 +8,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'res',
 
 
 class GeometryTests(unittest.TestCase):
+    def test_layout_bounds_keep_hull_and_turret_corners_part_local(self):
+        from wotstat_spotting_points.geometry import buildLayoutBounds
+        bounds = buildLayoutBounds(((-2, 1, -3), (2, 4, 3)),
+                                   ((-1, 0, -1), (1, 2, 1)))
+
+        self.assertEqual(bounds.hull[0], (-2, 1, -3))
+        self.assertEqual(bounds.hull[6], (2, 4, 3))
+        self.assertEqual(bounds.turret[0], (-1, 0, -1))
+        self.assertEqual(bounds.turret[6], (1, 2, 1))
+
     def test_select_geometry_keeps_visual_groups_independent(self):
         from wotstat_spotting_points.geometry import selectGeometry
         mask = [(0, 0, 0), (1, 0, 0)]

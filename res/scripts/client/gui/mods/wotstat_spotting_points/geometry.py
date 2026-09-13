@@ -7,6 +7,7 @@ import math
 from collections import namedtuple
 
 LineGeometry = namedtuple('LineGeometry', 'points color backColor')
+LayoutBounds = namedtuple('LayoutBounds', 'hull turret')
 TURRET_ARC_STEP = math.radians(5.0)
 
 
@@ -72,6 +73,10 @@ def bboxPoints(low, high):
             (low[0], high[1], high[2]), (low[0], low[1], high[2]),
             (high[0], low[1], low[2]), (high[0], high[1], low[2]),
             (high[0], high[1], high[2]), (high[0], low[1], high[2])]
+
+
+def buildLayoutBounds(hullBounds, turretBounds):
+    return LayoutBounds(bboxPoints(*hullBounds), bboxPoints(*turretBounds))
 
 
 def add(a, b):

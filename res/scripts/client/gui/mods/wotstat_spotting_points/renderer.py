@@ -4,14 +4,25 @@ from realm import CURRENT_REALM
 from vehicle_systems.tankStructure import TankPartIndexes, TankNodeNames
 
 from .geometry import (
-    addMovingGunPoint, buildGeometry, buildHighlightGroups, buildTurretArc,
-    LineGeometry, selectGeometry)
+    addMovingGunPoint, buildGeometry, buildHighlightGroups, buildLayoutBounds,
+    buildTurretArc, LineGeometry, selectGeometry)
 
 MASK_COLORS = (0xff3135, 0xab6d67)
 SPOT_COLORS = (0x00aaff, 0x5990bf)
 HIGHLIGHT_COLOR = 0xffd54a
 # The clients submit DebugDrawer primitives in opposite order.
 PASSES = (False, True) if CURRENT_REALM == 'RU' else (True, False)
+
+
+def getLayoutBounds(vehicle):
+    collisions = vehicle.appearance.collisions
+    if collisions is None:
+        return None
+    hullBounds = collisions.getBoundingBox(TankPartIndexes.HULL)
+    turretBounds = collisions.getBoundingBox(TankPartIndexes.TURRET)
+    if not hullBounds or not turretBounds:
+        return None
+    return buildLayoutBounds(hullBounds, turretBounds)
 
 
 def drawSphere(drawer, point, radius, colors):
