@@ -12,11 +12,14 @@ def normalizeAngle(value):
 
 
 def nextAngles(yaw, pitch, dx, dy, yawLimits, pitchLimits,
-               sensitivity=ROTATION_PER_PIXEL):
-    yaw -= dx * sensitivity
-    if yawLimits is None:
-        yaw = normalizeAngle(yaw)
-    else:
-        yaw = clamp(yaw, yawLimits)
-    pitch = clamp(pitch + dy * sensitivity, pitchLimits)
+               sensitivity=ROTATION_PER_PIXEL, changeYaw=True,
+               changePitch=True):
+    if changeYaw:
+        yaw -= dx * sensitivity
+        if yawLimits is None:
+            yaw = normalizeAngle(yaw)
+        else:
+            yaw = clamp(yaw, yawLimits)
+    if changePitch:
+        pitch = clamp(pitch + dy * sensitivity, pitchLimits)
     return yaw, pitch

@@ -31,6 +31,14 @@ class RotationMathTests(unittest.TestCase):
                                     (-0.5, 0.5), (-0.2, 0.3)),
                          (0.2, -0.1))
 
+    def test_static_axes_ignore_drag_and_limit_recalculation(self):
+        from wotstat_spotting_points.rotation_math import nextAngles
+
+        self.assertEqual(nextAngles(0.2, -0.1, 1000.0, 1000.0,
+                                    (-0.05, 0.05), (-0.05, 0.05),
+                                    changeYaw=False, changePitch=False),
+                         (0.2, -0.1))
+
 
 if __name__ == '__main__':
     unittest.main()
