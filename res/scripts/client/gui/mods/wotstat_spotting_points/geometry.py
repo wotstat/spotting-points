@@ -8,10 +8,12 @@ from collections import namedtuple
 LineGeometry = namedtuple('LineGeometry', 'points color backColor')
 
 
-def replacePoint(points, index, point):
-    result = list(points)
-    result[index] = point
-    return result
+def addMovingGunPoint(maskPoints, spotPoints, point):
+    resultMask = list(maskPoints)
+    resultSpots = list(spotPoints)
+    resultMask.append(point)
+    resultSpots.append(point)
+    return resultMask, resultSpots
 
 
 def _pointsEqual(a, b):

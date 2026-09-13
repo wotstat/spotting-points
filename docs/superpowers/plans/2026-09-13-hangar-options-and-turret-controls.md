@@ -149,39 +149,41 @@ git commit -m "feat: add transient display and rotation state"
 
 **Interfaces:**
 - Consumes: three booleans from `DisplayOptions`.
-- Produces: `replacePoint(points, index, point) -> list` and `drawVehicle(vehicle, showMaskPoints, showSpotPoints, showGuides)`.
+- Produces: `addMovingGunPoint(maskPoints, spotPoints, point) -> (maskPoints, spotPoints)` and `drawVehicle(vehicle, showMaskPoints, showSpotPoints, showGuides)`.
 - Preserves: `getWorldGeometry(vehicle) -> (maskPoints, spotPoints, lines)`.
 
-- [ ] **Step 1: Add the failing live-point replacement test**
+- [ ] **Step 1: Add the failing live-point preservation test**
 
 ```python
-def test_replace_point_does_not_leave_static_duplicate(self):
-    from wotstat_spotting_points.geometry import replacePoint
-    original = ['rear', 'front', 'left', 'right', 'static-gun', 'top']
-    replaced = replacePoint(original, 4, 'moving-gun')
-    self.assertEqual(replaced, ['rear', 'front', 'left', 'right',
-                                'moving-gun', 'top'])
-    self.assertEqual(original[4], 'static-gun')
+def test_dynamic_gun_point_is_added_after_static_mount(self):
+    from wotstat_spotting_points.geometry import addMovingGunPoint
+    staticMask = ['rear', 'front', 'left', 'right', 'static-gun', 'top']
+    mask, spots = addMovingGunPoint(staticMask, ['top'], 'moving-gun')
+    self.assertEqual(mask, ['rear', 'front', 'left', 'right',
+                            'static-gun', 'top', 'moving-gun'])
+    self.assertEqual(spots, ['top', 'moving-gun'])
 ```
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `C:/Python27/python.exe -B -m unittest tests.test_geometry.GeometryTests.test_replace_point_does_not_leave_static_duplicate`
+Run: `C:/Python27/python.exe -B tests/test_geometry.py -v GeometryTests.test_dynamic_gun_point_is_added_after_static_mount`
 
-Expected: FAIL because `replacePoint` is not defined.
+Expected: FAIL because `addMovingGunPoint` is not defined.
 
 - [ ] **Step 3: Add the helper and update world geometry**
 
 ```python
-def replacePoint(points, index, point):
-    result = list(points)
-    result[index] = point
-    return result
+def addMovingGunPoint(maskPoints, spotPoints, point):
+    resultMask = list(maskPoints)
+    resultSpots = list(spotPoints)
+    resultMask.append(point)
+    resultSpots.append(point)
+    return resultMask, resultSpots
 ```
 
-After converting the six static mask points, replace index 4 with the live
-`TankNodeNames.GUN_JOINT` position instead of appending it. Build observation
-points as `[maskPoints[5], maskPoints[4]]`.
+After converting the six static mask points, append the live
+`TankNodeNames.GUN_JOINT` position. Keep the descriptor-derived point at index
+4 and use the appended live point in both the mask and observation groups.
 
 - [ ] **Step 4: Gate each primitive group in `drawVehicle`**
 
@@ -205,7 +207,7 @@ def drawVehicle(vehicle, showMaskPoints, showSpotPoints, showGuides):
 
 Run: `C:/Python27/python.exe -B -m unittest tests.test_geometry`
 
-Expected: all geometry tests PASS, including the new replacement regression.
+Expected: all geometry tests PASS, including the new preservation regression.
 
 Commit:
 
@@ -470,7 +472,8 @@ Enable turret rotation. Use MCP mouse input to drag the hull/empty scene and
 verify normal camera movement. Drag the turret/gun and verify yaw and pitch
 change while the camera does not. Use `wot_exec` to read the applied angles and
 descriptor limits, drive beyond both axes, and verify clamping. Confirm the live
-combined gun point follows the gun and the guides do not rotate.
+combined gun point follows the gun while the static gun-mount point and guides
+do not rotate.
 
 - [ ] **Step 5: Verify restart defaults and logs**
 

@@ -38,15 +38,17 @@ class GeometryTests(unittest.TestCase):
         self.assertEqual(selectedMask, [(0, 0, 0)])
         self.assertEqual(selectedSpots, spots)
 
-    def test_replace_point_moves_gun_without_static_duplicate(self):
-        from wotstat_spotting_points.geometry import replacePoint
-        original = ['rear', 'front', 'left', 'right', 'static-gun', 'top']
+    def test_dynamic_gun_point_is_added_after_static_mount(self):
+        from wotstat_spotting_points.geometry import addMovingGunPoint
+        staticMask = ['rear', 'front', 'left', 'right', 'static-gun', 'top']
 
-        replaced = replacePoint(original, 4, 'moving-gun')
+        mask, spots = addMovingGunPoint(
+            staticMask, ['top'], 'moving-gun')
 
-        self.assertEqual(replaced, ['rear', 'front', 'left', 'right',
-                                    'moving-gun', 'top'])
-        self.assertEqual(original[4], 'static-gun')
+        self.assertEqual(mask, ['rear', 'front', 'left', 'right',
+                                'static-gun', 'top', 'moving-gun'])
+        self.assertEqual(spots, ['top', 'moving-gun'])
+        self.assertEqual(staticMask[4], 'static-gun')
 
     def test_asymmetric_hull_and_component_offsets(self):
         from wotstat_spotting_points.geometry import buildGeometry

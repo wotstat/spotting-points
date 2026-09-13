@@ -58,11 +58,12 @@ primitives:
 - guides use the existing white/gray lines;
 - a point enabled in both groups is drawn once in blue.
 
-The live gun-joint position replaces the static gun mask point. Consequently,
-the combined gun observation/mask point follows turret yaw and gun pitch without
-leaving a stale red point behind. The top observation point remains attached to
-the hull. Guide geometry continues to use the unrotated vehicle-local reference
-geometry, so it does not follow turret rotation.
+The static gun-mount mask point remains at the descriptor position for zero
+turret rotation. A separate combined observation/mask point uses the live
+gun-joint position and follows turret yaw and gun pitch. The top observation
+point remains attached to the hull. Guide geometry continues to use the
+unrotated vehicle-local reference geometry, so it does not follow turret
+rotation.
 
 ## Turret drag behavior
 
@@ -121,10 +122,9 @@ WoT compatibility is source-verified unless a WoT client is also run.
 ## Verification
 
 Pure Python 2.7 tests cover state defaults and updates, visual filtering, shared
-point precedence, yaw normalization/clamping, pitch clamping inputs, and drag
-state transitions that do not require client objects. Existing geometry tests
-remain unchanged unless the live gun point replacement requires an explicit
-regression assertion.
+point precedence, preservation of the static gun-mount point when adding the
+moving gun point, yaw normalization/clamping, pitch clamping inputs, and drag
+state transitions that do not require client objects.
 
 The release build must compile AS3 and Python, package both `.mtmod` and
 `.wotmod`, and contain only unique mod resources. Runtime checks through the
@@ -138,6 +138,7 @@ WotStat REPL 1.4.1 MCP cover:
   right always turns counterclockwise, and a hull drag rotates the camera
   normally;
 - yaw and pitch stop at the descriptor limits;
-- the combined gun point follows the moved gun while guides remain fixed;
+- the combined gun point follows the moved gun while the static gun-mount point
+  and guides remain fixed;
 - closing/reopening the window keeps session state;
 - teardown leaves no duplicate callbacks, listeners, restrictions, or errors.

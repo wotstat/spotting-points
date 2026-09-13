@@ -3,7 +3,8 @@ from Math import Matrix, Vector3
 from realm import CURRENT_REALM
 from vehicle_systems.tankStructure import TankPartIndexes, TankNodeNames
 
-from .geometry import buildGeometry, LineGeometry, replacePoint, selectGeometry
+from .geometry import (
+    addMovingGunPoint, buildGeometry, LineGeometry, selectGeometry)
 
 MASK_COLORS = (0xff3135, 0xab6d67)
 SPOT_COLORS = (0x00aaff, 0x5990bf)
@@ -58,8 +59,8 @@ def getWorldGeometry(vehicle):
     if gunJoint is None:
         return None
     movingPoint = Vector3(gunJoint.position)
-    maskPoints = replacePoint(maskPoints, 4, movingPoint)
-    spotPoints = [maskPoints[5], maskPoints[4]]
+    maskPoints, spotPoints = addMovingGunPoint(
+        maskPoints, [maskPoints[5]], movingPoint)
     return maskPoints, spotPoints, worldLines
 
 
