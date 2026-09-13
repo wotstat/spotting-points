@@ -33,15 +33,16 @@ BBox и направляющие SpottingUtil (`showBBoxes` + `showBBoxAlign`).
 
 Нужен [ModsList API](https://docs.wotstat.info/guide/integrations/mods-list/).
 Мод не подменяет штатные файлы или общие обработчики: у окна собственные alias
-и SWF, а ограничение камеры активно только во время целевого drag-жеста.
+и SWF. Во время целевого drag-жеста мод через штатный camera manager временно
+отключает только вращение камеры и затем восстанавливает прежнее состояние.
 В EU-просмотре брони мышь остаётся под исключительным управлением штатного
 Armor Inspector; обработчик вращения этого мода там не запускается.
 
 ## Установка
 
-- «Мир танков»: `dist/wotstat.spotting-points_0.2.5.mtmod` →
+- «Мир танков»: `dist/wotstat.spotting-points_0.2.6.mtmod` →
   `mods/<версия игры>/`.
-- World of Tanks: `dist/wotstat.spotting-points_0.2.5.wotmod` →
+- World of Tanks: `dist/wotstat.spotting-points_0.2.6.wotmod` →
   `mods/<версия игры>/`.
 
 Пакет устанавливайте при закрытой игре. При обновлении удалите только прежний
@@ -53,7 +54,7 @@ Armor Inspector; обработчик вращения этого мода та�
 в `as3/libs`. Файлы SWC не коммитятся и не попадают в мод.
 
 ```powershell
-./build.ps1 -Version 0.2.5 -Python C:/Python27/python.exe
+./build.ps1 -Version 0.2.6 -Python C:/Python27/python.exe
 C:/Python27/python.exe -B -m unittest discover -s tests
 ```
 

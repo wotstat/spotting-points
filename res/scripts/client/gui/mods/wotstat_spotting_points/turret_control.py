@@ -1,6 +1,7 @@
 import logging
 
 import BigWorld
+import CGF
 import GUI
 import math_utils
 from AvatarInputHandler import cameras
@@ -15,6 +16,15 @@ from vehicle_systems.tankStructure import (
 
 from .rotation_math import (
     canStartPartDrag, findRotatingPartHit, getDragAxes, nextAngles)
+from .camera_control import disableCameraRotation, restoreCameraMovement
+
+try:
+    from cgf_components.hangar_camera_manager import HangarCameraSystem
+except ImportError:
+    HangarCameraSystem = None
+    from cgf_components.hangar_camera_manager import HangarCameraManager
+else:
+    HangarCameraManager = None
 
 try:
     from gui.Scaleform.lobby_entry import getLobbyStateMachine
@@ -33,7 +43,9 @@ class TurretMouseControl(object):
         self._enabled = False
         self._dragVehicle = None
         self._dragPart = None
-        self._restrictionAdded = False
+        self._moveListenerAdded = False
+        self._cameraManager = None
+        self._cameraMovementState = None
 
     def setEnabled(self, enabled):
         enabled = bool(enabled)
@@ -53,11 +65,12 @@ class TurretMouseControl(object):
     def cancelDrag(self):
         self._dragVehicle = None
         self._dragPart = None
-        if self._restrictionAdded:
-            g_eventBus.removeRestriction(
+        if self._moveListenerAdded:
+            g_eventBus.removeListener(
                 CameraRelatedEvents.LOBBY_VIEW_MOUSE_MOVE,
-                self._restrictMouseMove, EVENT_BUS_SCOPE.GLOBAL)
-            self._restrictionAdded = False
+                self._handleMouseMove, EVENT_BUS_SCOPE.GLOBAL)
+            self._moveListenerAdded = False
+        self._restoreCameraMovement()
 
     def destroy(self):
         self.setEnabled(False)
@@ -84,14 +97,16 @@ class TurretMouseControl(object):
                 partIndex, TankPartIndexes.TURRET, TankPartIndexes.GUN,
                 canRotateYaw, canRotatePitch):
             return
+        if not self._disableCameraRotation():
+            return
         self._dragVehicle = vehicle
         self._dragPart = partIndex
-        if not self._restrictionAdded:
-            g_eventBus.addRestriction(
+        if not self._moveListenerAdded:
+            g_eventBus.addListener(
                 CameraRelatedEvents.LOBBY_VIEW_MOUSE_MOVE,
-                self._restrictMouseMove, EVENT_BUS_SCOPE.GLOBAL,
+                self._handleMouseMove, EVENT_BUS_SCOPE.GLOBAL,
                 EventPriority.HIGH)
-            self._restrictionAdded = True
+            self._moveListenerAdded = True
 
     def _onMouseUp(self):
         self.cancelDrag()
@@ -99,18 +114,17 @@ class TurretMouseControl(object):
     def _onVehicleChangeStarted(self):
         self.cancelDrag()
 
-    def _restrictMouseMove(self, event):
+    def _handleMouseMove(self, event):
         if self._dragVehicle is None:
-            return True
+            return
         if self._isArmorViewActive():
             self.cancelDrag()
-            return True
+            return
         try:
             self._rotate(event.ctx)
         except Exception:
             log.exception('Turret drag stopped after rotation error')
             self.cancelDrag()
-        return False
 
     def _rotate(self, ctx):
         vehicle = self._dragVehicle
@@ -163,6 +177,31 @@ class TurretMouseControl(object):
             return False
         armorState = stateMachine.getStateByCls(ArmorState)
         return armorState is not None and armorState.isEntered()
+
+    def _getCameraManager(self):
+        if not self._hangar.spaceInited:
+            return None
+        if HangarCameraSystem is not None:
+            return CGF.getSystem(self._hangar.spaceID, HangarCameraSystem)
+        return CGF.getManager(self._hangar.spaceID, HangarCameraManager)
+
+    def _disableCameraRotation(self):
+        cameraManager = self._getCameraManager()
+        movementState = disableCameraRotation(cameraManager)
+        if movementState is None:
+            log.warning('Turret drag ignored: hangar camera is unavailable')
+            return False
+        self._cameraManager = cameraManager
+        self._cameraMovementState = movementState
+        return True
+
+    def _restoreCameraMovement(self):
+        cameraManager = self._cameraManager
+        movementState = self._cameraMovementState
+        self._cameraManager = None
+        self._cameraMovementState = None
+        if cameraManager is self._getCameraManager():
+            restoreCameraMovement(cameraManager, movementState)
 
     @staticmethod
     def _getRotatingPartHit(vehicle):
