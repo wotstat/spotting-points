@@ -530,28 +530,27 @@ class CalloutLayoutSolver(object):
             candidateSets = {}
             itemById = dict((str(item['id']), item) for item in items)
             for pointId in sorted(reconsiderIds):
-                item = itemById[pointId]
-                candidates = self._buildCandidates(
-                    item, geometry, width, height)
-                self.candidateCount += len(candidates)
-                prepared = []
-                for candidate in candidates:
-                    entry = dict(candidate)
-                    entry['id'] = pointId
-                    entry['point'] = (float(item['x']), float(item['y']))
-                    entry['_localScore'] = self._candidateScore(
-                        item, entry, geometry, width, height)
-                    entry['_signature'] = self._candidateSignature(entry)
-                    prepared.append(entry)
-                prepared.sort(key=lambda entry: (entry['_localScore'],
-                                                 entry['_signature']))
-                candidateSets[pointId] = prepared
+                candidateSets[pointId] = self._prepareCandidates(
+                    itemById[pointId], geometry, width, height)
+            initialChoices = dict(
+                (entry['id'], (entry['lane'], entry['offsetIndex']))
+                for entry in entries)
             plan = self._repairPlan(
                 {'score': score,
                  'signature': ''.join(entry['_signature']
                                     for entry in entries),
                  'entries': entries},
                 candidateSets, reconsiderIds, preserveEqual=True)
+            if any(initialChoices[entry['id']]
+                   != (entry['lane'], entry['offsetIndex'])
+                   for entry in plan['entries']):
+                for pointId in sorted(currentIds):
+                    if pointId not in candidateSets:
+                        candidateSets[pointId] = self._prepareCandidates(
+                            itemById[pointId], geometry, width, height)
+                plan = self._settlePlan(
+                    plan, candidateSets, preserveEqual=True)
+                reconsiderIds = currentIds
             score = plan['score']
             entries = plan['entries']
             worsened = self._stableScoreWorsened(score, previousScore)
@@ -578,20 +577,8 @@ class CalloutLayoutSolver(object):
         candidateSets = {}
         self.candidateCount = 0
         for item in ordered:
-            candidates = self._buildCandidates(
+            prepared = self._prepareCandidates(
                 item, geometry, width, height)
-            self.candidateCount += len(candidates)
-            prepared = []
-            for candidate in candidates:
-                entry = dict(candidate)
-                entry['id'] = str(item['id'])
-                entry['point'] = (float(item['x']), float(item['y']))
-                entry['_localScore'] = self._candidateScore(
-                    item, entry, geometry, width, height)
-                entry['_signature'] = self._candidateSignature(entry)
-                prepared.append(entry)
-            prepared.sort(key=lambda entry: (entry['_localScore'],
-                                             entry['_signature']))
             candidateSets[str(item['id'])] = prepared
             bestEntry, bestScore = self._bestCandidate(
                 prepared, selected, score)
@@ -603,7 +590,45 @@ class CalloutLayoutSolver(object):
                 'entries': selected}
         if any(score[index] for index in (2, 4, 6)):
             plan = self._repairPlan(plan, candidateSets)
-        return plan
+        return self._settlePlan(plan, candidateSets)
+
+    def _prepareCandidates(self, item, geometry, width, height):
+        candidates = self._buildCandidates(item, geometry, width, height)
+        self.candidateCount += len(candidates)
+        prepared = []
+        for candidate in candidates:
+            entry = dict(candidate)
+            entry['id'] = str(item['id'])
+            entry['point'] = (float(item['x']), float(item['y']))
+            entry['_localScore'] = self._candidateScore(
+                item, entry, geometry, width, height)
+            entry['_signature'] = self._candidateSignature(entry)
+            prepared.append(entry)
+        prepared.sort(key=lambda entry: (entry['_localScore'],
+                                         entry['_signature']))
+        return prepared
+
+    def _settlePlan(self, plan, candidateSets, preserveEqual=False):
+        entries = plan['entries']
+        if not entries:
+            return plan
+        burdens = {}
+        for current in entries:
+            burden = current['_localScore']
+            for other in entries:
+                if other is current:
+                    continue
+                burden = _addScores(
+                    burden, self._expandPairScore(
+                        self._pairScore(current, other)))
+            burdens[current['id']] = burden
+        ordered = sorted(
+            entries, key=lambda entry: burdens[entry['id']], reverse=True)
+        return self._repairPlan({
+            'score': plan['score'],
+            'signature': ''.join(entry['_signature'] for entry in ordered),
+            'entries': ordered
+        }, candidateSets, set(candidateSets), preserveEqual)
 
     def _bestCandidate(self, candidates, selected, baseScore):
         bestEntry = None
