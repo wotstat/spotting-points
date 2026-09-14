@@ -19,7 +19,7 @@ class DisplayOptionsTests(unittest.TestCase):
             'showGuides': False,
             'allowTurretRotation': False,
             'layoutDebug': False,
-            'calloutMode': 2,
+            'calloutMode': 1,
         })
         self.assertFalse(options.hasVisuals())
 

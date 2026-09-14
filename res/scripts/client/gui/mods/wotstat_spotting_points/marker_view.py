@@ -272,7 +272,7 @@ class MarkerOverlayView(View):
             self.flashObject.as_setLayoutDebug(bool(value))
 
     def setCalloutMode(self, mode):
-        self._layoutSolver = CalloutLayoutSolver() if mode == 1 else SideLayoutSolver()
+        self._layoutSolver = CalloutLayoutSolver() if mode == 2 else SideLayoutSolver()
         self._layoutSolverFailed = False
         if self._ready:
             self.flashObject.as_setCalloutsEnabled(mode != 0)

@@ -7,7 +7,7 @@ package wotstat.spottingpoints {
     import flash.text.TextField;
     import flash.text.TextFieldAutoSize;
     import flash.text.TextFormat;
-    import scaleform.clik.motion.Tween;
+    import flash.utils.getTimer;
 
     public class SpotPointMarker extends Sprite {
         private static const DOT_RADIUS:Number = 4;
@@ -24,7 +24,6 @@ package wotstat.spottingpoints {
         private var callout:Sprite;
         private var calloutBackground:Shape;
         private var labelField:TextField;
-        private var pulseTween:Tween;
         private var persistentCallout:Boolean = false;
         private var hovered:Boolean = false;
         private var calloutsEnabled:Boolean = true;
@@ -46,7 +45,6 @@ package wotstat.spottingpoints {
             ring.graphics.lineStyle(1.5, 0xFFF2B2, 0.72);
             if (isObservationPoint) {
                 ring.graphics.drawRect(-6, -6, 12, 12);
-                ring.rotation = 45;
             } else {
                 ring.graphics.drawCircle(0, 0, DOT_RADIUS + 2);
             }
@@ -83,14 +81,14 @@ package wotstat.spottingpoints {
             setLabel(label);
             updateCalloutVisibility();
 
-            pulseTween = new Tween(PULSE_DURATION, ring, {
-                "alpha": 0,
-                "scaleX": 2.6,
-                "scaleY": 2.6
-            }, {
-                "delay": PULSE_DELAY,
-                "loop": true
-            });
+            updatePulse(getTimer());
+        }
+
+        public function updatePulse(now:Number):void {
+            var phase:Number = now % (PULSE_DELAY + PULSE_DURATION);
+            var progress:Number = Math.max(0, (phase - PULSE_DELAY) / PULSE_DURATION);
+            ring.alpha = 0.72 * (1 - progress);
+            ring.scaleX = ring.scaleY = 1 + 1.6 * progress;
         }
 
         public function setData(label:String, showCallout:Boolean):void {
@@ -165,10 +163,6 @@ package wotstat.spottingpoints {
         }
 
         public function dispose():void {
-            if (pulseTween != null) {
-                pulseTween.dispose();
-                pulseTween = null;
-            }
             pointId = null;
             currentLabel = null;
             labelField = null;

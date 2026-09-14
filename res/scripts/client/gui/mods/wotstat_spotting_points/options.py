@@ -7,7 +7,7 @@ class DisplayOptions(object):
     def __init__(self):
         for name in OPTION_NAMES:
             setattr(self, name, False)
-        self.calloutMode = 2
+        self.calloutMode = 1
 
     def setValue(self, name, value):
         if name == 'calloutMode':

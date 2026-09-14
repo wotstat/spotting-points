@@ -4,6 +4,7 @@ package wotstat.spottingpoints {
     import flash.events.Event;
     import flash.geom.Point;
     import flash.utils.Dictionary;
+    import flash.utils.getTimer;
     import net.wg.infrastructure.base.AbstractView;
 
     public class MarkerOverlay extends AbstractView {
@@ -144,6 +145,10 @@ package wotstat.spottingpoints {
 
         private function onEnterFrame(event:Event):void {
             if (active) {
+                var now:Number = getTimer();
+                for each (var marker:SpotPointMarker in markers) {
+                    marker.updatePulse(now);
+                }
                 layoutCallouts();
             }
         }

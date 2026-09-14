@@ -1,6 +1,7 @@
 package wotstat.spottingpoints {
     import flash.text.TextField;
     import flash.text.TextFormat;
+    import flash.text.AntiAliasType;
     import net.wg.gui.components.controls.CheckBox;
     import net.wg.gui.components.controls.DropdownMenu;
     import net.wg.infrastructure.base.AbstractWindowView;
@@ -23,7 +24,7 @@ package wotstat.spottingpoints {
         private var boxes:Object = {};
         private var headings:Object = {};
         private var calloutMode:DropdownMenu;
-        private var selectedMode:int = 2;
+        private var selectedMode:int = 1;
         private var updating:Boolean = false;
 
         public function SettingsWindow() {
@@ -34,9 +35,9 @@ package wotstat.spottingpoints {
         override protected function onPopulate():void {
             super.onPopulate();
             window.useBottomBtns = false;
-            createHeading("group3d", LEFT, 14, 13);
-            createHeading("groupUi", RIGHT, 14, 13);
-            createHeading("callouts", RIGHT, 81, 13);
+            createHeading("group3d", LEFT, 14);
+            createHeading("groupUi", RIGHT, 14);
+            createHeading("callouts", RIGHT, 81);
             for (var index:int = 0; index < OPTION_NAMES.length; index++) {
                 var optionName:String = OPTION_NAMES[index];
                 var box:CheckBox = App.utils.classFactory.getComponent(
@@ -54,6 +55,7 @@ package wotstat.spottingpoints {
             calloutMode = App.utils.classFactory.getComponent(
                 "DropdownMenuUI", DropdownMenu) as DropdownMenu;
             calloutMode.x = RIGHT;
+            calloutMode.name = "calloutMode";
             calloutMode.y = 105;
             calloutMode.width = 236;
             calloutMode.dropdown = "DropdownMenu_ScrollingList";
@@ -63,10 +65,15 @@ package wotstat.spottingpoints {
             addChild(calloutMode);
         }
 
-        private function createHeading(key:String, xPos:int, yPos:int,
-                                       size:int):void {
+        private function createHeading(key:String, xPos:int, yPos:int):void {
             var field:TextField = new TextField();
-            field.defaultTextFormat = new TextFormat("$FieldFont", size, 0xD8D6CB);
+            // Same format as the client's settings FieldSet.textField.
+            var format:TextFormat = new TextFormat("$FieldFont", 12, 0x969687);
+            format.leading = 2;
+            format.kerning = false;
+            field.defaultTextFormat = format;
+            field.embedFonts = true;
+            field.antiAliasType = AntiAliasType.ADVANCED;
             field.x = xPos;
             field.y = yPos;
             field.width = 236;
