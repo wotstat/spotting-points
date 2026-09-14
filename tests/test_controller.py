@@ -36,6 +36,7 @@ class FakeMarkerView(object):
         self.clears = 0
         self.hit = hit
         self.hitCalls = 0
+        self.layoutDebug = []
 
     def clearMarkers(self):
         self.clears += 1
@@ -43,6 +44,9 @@ class FakeMarkerView(object):
     def hitTest(self, x, y):
         self.hitCalls += 1
         return self.hit
+
+    def setLayoutDebug(self, value):
+        self.layoutDebug.append(value)
 
 
 def _module(name, **attributes):
@@ -152,6 +156,14 @@ class ControllerLifecycleTests(unittest.TestCase):
 
         self.assertIsNone(controller._hoveredPointId)
         self.assertEqual(controller._markerView.hitCalls, 0)
+
+    def test_layout_debug_option_updates_the_attached_overlay(self):
+        controller = self.makeController()
+
+        self.assertTrue(controller.setOption('layoutDebug', True))
+
+        self.assertTrue(controller.options.layoutDebug)
+        self.assertEqual(controller._markerView.layoutDebug, [True])
 
 
 if __name__ == '__main__':

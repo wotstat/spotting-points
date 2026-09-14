@@ -10,7 +10,9 @@ visually stable while the camera or turret rotates.
 
 - Target «Мир танков» (`mt-ru`) only.
 - Keep the existing marker appearance, hover behavior, and point labels.
-- Do not add settings or persist layout state between overlay lifetimes.
+- Do not add a normal user-facing setting or persist layout state between
+  overlay lifetimes. A transient developer-only layout debug flag may be
+  exposed when the settings window is opened while Alt is held.
 - Treat this as an interactive prototype: prioritize a useful in-client result
   over a new automated AS3 test platform.
 - Do not close the game client after runtime validation.
@@ -23,17 +25,20 @@ vehicle matrix. Turret corners use the live turret joint matrix so the
 projected turret rectangle follows turret rotation.
 
 Each corner is attached to an invisible native hangar marker. AS3 reads their
-screen positions every frame and computes padded axis-aligned screen rectangles
-for the hull and turret. Missing or invalid bounds fall back to the existing
-point envelope for that frame instead of hiding the visible markers.
+screen positions every frame, builds separate convex hull and turret polygons,
+and inflates each polygon by the callout clearance. Their AABBs are only cheap
+outer envelopes for coarse side selection; collision and slot-edge calculations
+use the polygons. A frame without all valid projected anchors is skipped instead
+of replacing the forbidden geometry with an AABB approximation.
 
 ## Placement behavior
 
 - Every label can use the shared slot above the combined vehicle envelope or a
   side slot. The top slot is not reserved for the `top` point.
 - Side candidates for `rear`, `front`, `left`, `right`, and `top` avoid the hull
-  rectangle. Side candidates for `gunStatic` and `gunMoving` avoid the turret
-  rectangle.
+  polygon. Side candidates for `gunStatic` and `gunMoving` avoid the turret
+  polygon. Every side candidate also avoids both projected polygons at its
+  actual vertical span.
 - The solver evaluates each point as the possible top-slot occupant and selects
   a complete plan that avoids overlaps whenever one fits. Top-leader length has
   extra weight so the point nearest that slot wins instead of accepting one very
@@ -43,7 +48,7 @@ point envelope for that frame instead of hiding the visible markers.
   overlap instead of hiding a label.
 - Label rectangles share one collision pass, so labels from the two groups do
   not overlap.
-- A side label first moves along its own avoidance rectangle, then tries the
+- A side label first moves along its own avoidance polygon, then tries the
   next slot on that side. Moving to the opposite side is the last fallback.
 - Labels are clamped to the screen margins, including long localized text.
 
@@ -68,12 +73,21 @@ moving after the camera stops.
    data beside the existing spotting geometry.
 3. `marker_view.py` creates and removes native marker providers for invisible
    layout anchors and visible point markers.
-4. `MarkerOverlay.as` owns projected rectangles, candidate plans, collision
+4. `MarkerOverlay.as` owns projected polygons, candidate plans, collision
    resolution, scoring, and atomic application of the selected plan.
 5. `SpotPointMarker.as` accepts a polyline leader and explicit callout box
    position.
 
 No shared game resource is replaced and no global input handler is changed.
+
+## Layout debug
+
+Holding Alt while opening the settings window reveals a non-persistent
+`layoutDebug` checkbox. The overlay shows raw hull/turret corner projection,
+the inflated convex forbidden polygons, valid and rejected candidate label
+rectangles, the screen-safe area, and the selected complete plan. Debug drawing
+observes the same stateless solver inputs and results; it does not maintain or
+animate a second layout model.
 
 ## Validation
 

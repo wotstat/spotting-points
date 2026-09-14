@@ -44,6 +44,8 @@ class SpottingPointsController(object):
             else:
                 self._hoveredPointId = None
                 hideMarkerView(self)
+        elif name == 'layoutDebug' and self._markerView is not None:
+            self._markerView.setLayoutDebug(self.options.layoutDebug)
         if self.options.hasVisuals():
             self._start()
         else:
@@ -80,6 +82,7 @@ class SpottingPointsController(object):
 
     def attachMarkerView(self, view):
         self._markerView = view
+        view.setLayoutDebug(self.options.layoutDebug)
 
     def detachMarkerView(self, view):
         if self._markerView is view:

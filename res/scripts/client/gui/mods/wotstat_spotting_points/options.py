@@ -1,5 +1,5 @@
 OPTION_NAMES = ('showMaskPoints', 'showSpotPoints', 'showUiPoints',
-                'showGuides', 'allowTurretRotation')
+                'showGuides', 'allowTurretRotation', 'layoutDebug')
 UI_FRAME_INTERVAL = 1.0 / 30.0
 
 

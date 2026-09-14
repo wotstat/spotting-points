@@ -11,13 +11,16 @@ package wotstat.spottingpoints {
         private static const LEFT:int = 24;
         private static const FIRST_ROW:int = 18;
         private static const ROW_HEIGHT:int = 36;
-        private static const OPTION_NAMES:Array = [
+        private static const DEBUG_OPTION_NAME:String = "layoutDebug";
+        private static const STANDARD_OPTION_NAMES:Array = [
             "showMaskPoints",
             "showSpotPoints",
             "showUiPoints",
             "showGuides",
             "allowTurretRotation"
         ];
+        private static const OPTION_NAMES:Array = STANDARD_OPTION_NAMES.concat(
+            DEBUG_OPTION_NAME);
 
         private var boxes:Object = {};
 
@@ -38,17 +41,24 @@ package wotstat.spottingpoints {
                 box.y = FIRST_ROW + index * ROW_HEIGHT;
                 box.width = CONTENT_WIDTH - LEFT * 2;
                 box.addEventListener(ButtonEvent.CLICK, onOptionClick);
+                if (optionName == DEBUG_OPTION_NAME) {
+                    box.visible = false;
+                }
                 addChild(box);
                 boxes[optionName] = box;
             }
         }
 
-        public function as_setData(options:Object, labels:Object):void {
+        public function as_setData(options:Object, labels:Object,
+                                   showDebugOption:Boolean):void {
             window.title = labels.title;
             for each (var optionName:String in OPTION_NAMES) {
                 var box:CheckBox = boxes[optionName] as CheckBox;
                 box.label = labels[optionName];
             }
+            boxes[DEBUG_OPTION_NAME].visible = showDebugOption;
+            setSize(CONTENT_WIDTH, CONTENT_HEIGHT +
+                (showDebugOption ? ROW_HEIGHT : 0));
             as_setOptions(options);
             visible = true;
         }

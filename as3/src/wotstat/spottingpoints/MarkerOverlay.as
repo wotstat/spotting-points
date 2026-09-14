@@ -15,9 +15,12 @@ package wotstat.spottingpoints {
         private static const TOP_LEADER_WEIGHT:Number = 4;
         private static const BLOCKED_PLACEMENT_PENALTY:Number = 1000000;
         private static const MAX_SLOT_ATTEMPTS:int = 16;
+        private static const DEBUG_SLOT_ATTEMPTS:int = 5;
 
         private var markers:Dictionary = new Dictionary();
         private var layoutAnchors:Dictionary = new Dictionary();
+        private var debugOverlay:LayoutDebugOverlay;
+        private var layoutDebug:Boolean = false;
         private var active:Boolean = true;
 
         public function MarkerOverlay() {
@@ -29,6 +32,9 @@ package wotstat.spottingpoints {
             mouseEnabled = false;
             mouseChildren = false;
             visible = true;
+            debugOverlay = new LayoutDebugOverlay();
+            debugOverlay.visible = false;
+            addChildAt(debugOverlay, 0);
             addEventListener(Event.ENTER_FRAME, onEnterFrame);
         }
 
@@ -97,6 +103,16 @@ package wotstat.spottingpoints {
             visible = value;
         }
 
+        public function as_setLayoutDebug(value:Boolean):void {
+            layoutDebug = value;
+            if (debugOverlay != null) {
+                debugOverlay.visible = value;
+                if (!value) {
+                    debugOverlay.clear();
+                }
+            }
+        }
+
         public function as_clearMarkers():void {
             for (var key:Object in markers) {
                 removeMarker(String(key));
@@ -104,6 +120,9 @@ package wotstat.spottingpoints {
             for (key in layoutAnchors) {
                 removeChild(layoutAnchors[key] as DisplayObject);
                 delete layoutAnchors[key];
+            }
+            if (debugOverlay != null) {
+                debugOverlay.clear();
             }
         }
 
@@ -132,20 +151,20 @@ package wotstat.spottingpoints {
                 visibleMarkers.push(marker);
             }
             if (visibleMarkers.length == 0) {
+                if (debugOverlay != null) {
+                    debugOverlay.clear();
+                }
                 return;
             }
 
-            var fallbackBounds:Rectangle = visiblePointBounds(visibleMarkers);
-            var hullBounds:Rectangle = projectedBounds("hull");
-            var turretBounds:Rectangle = projectedBounds("turret");
-            if (hullBounds == null || turretBounds == null) {
-                hullBounds = fallbackBounds;
-                turretBounds = fallbackBounds;
-            }
-            if (hullBounds == null || turretBounds == null) {
+            var hullPart:Object = projectedPart("hull");
+            var turretPart:Object = projectedPart("turret");
+            if (hullPart == null || turretPart == null) {
+                if (debugOverlay != null) {
+                    debugOverlay.clear();
+                }
                 return;
             }
-            var vehicleBounds:Rectangle = hullBounds.union(turretBounds);
             var items:Array = [];
 
             for each (marker in visibleMarkers) {
@@ -153,23 +172,33 @@ package wotstat.spottingpoints {
                     continue;
                 }
                 var position:Point = displayPosition(marker);
-                var avoidance:Rectangle = isTurretPoint(marker.pointId) ?
-                    turretBounds : hullBounds;
+                var avoidancePart:Object =
+                    isTurretPoint(marker.pointId) ? turretPart : hullPart;
                 items.push({
                     "marker": marker,
                     "markerX": position.x,
                     "markerY": position.y,
-                    "avoidance": avoidance
+                    "avoidance": avoidancePart.obstacle,
+                    "avoidanceBounds": avoidancePart.bounds
                 });
             }
 
-            var avoidanceBounds:Array = [hullBounds, turretBounds];
+            var obstacles:Array = [
+                hullPart.obstacle as Array,
+                turretPart.obstacle as Array
+            ];
             items.sort(comparePointId);
             var plan:Object = chooseLayoutPlan(
-                items, vehicleBounds, avoidanceBounds,
-                width, height);
+                items, obstacles, width, height, layoutDebug);
             if (plan != null) {
                 applyLayoutPlan(plan);
+            }
+            if (debugOverlay != null && layoutDebug) {
+                debugOverlay.render(
+                    hullPart, turretPart,
+                    plan != null ? plan.candidates as Array : null,
+                    plan != null ? plan.placements as Array : null,
+                    width, height);
             }
         }
 
@@ -177,7 +206,7 @@ package wotstat.spottingpoints {
             return globalToLocal(value.localToGlobal(new Point(0, 0)));
         }
 
-        private function projectedBounds(prefix:String):Rectangle {
+        private function projectedPart(prefix:String):Object {
             var points:Array = [];
             for (var index:int = 0; index < 8; index++) {
                 var anchor:DisplayObject = layoutAnchors[
@@ -191,42 +220,22 @@ package wotstat.spottingpoints {
                 }
                 points.push(point);
             }
-            return boundsForPoints(points, true);
-        }
-
-        private function visiblePointBounds(values:Array):Rectangle {
-            var points:Array = [];
-            for each (var marker:SpotPointMarker in values) {
-                var point:Point = displayPosition(marker);
-                if (validPoint(point)) {
-                    points.push(point);
-                }
-            }
-            return boundsForPoints(points, false);
-        }
-
-        private function boundsForPoints(points:Array,
-                                         rejectCollapsed:Boolean):Rectangle {
-            if (points.length == 0) {
+            var outline:Array = LayoutGeometry.convexHull(points);
+            if (outline.length < 3) {
                 return null;
             }
-            var minX:Number = Number(points[0].x);
-            var maxX:Number = minX;
-            var minY:Number = Number(points[0].y);
-            var maxY:Number = minY;
-            for each (var point:Point in points) {
-                minX = Math.min(minX, point.x);
-                maxX = Math.max(maxX, point.x);
-                minY = Math.min(minY, point.y);
-                maxY = Math.max(maxY, point.y);
-            }
-            if (rejectCollapsed && (maxX - minX < 1 || maxY - minY < 1)) {
+            var obstacle:Array = LayoutGeometry.inflateConvexPolygon(
+                outline, BOUNDS_PADDING);
+            var bounds:Rectangle = LayoutGeometry.polygonBounds(obstacle);
+            if (bounds == null || bounds.width < 1 || bounds.height < 1) {
                 return null;
             }
-            return new Rectangle(
-                minX - BOUNDS_PADDING, minY - BOUNDS_PADDING,
-                maxX - minX + BOUNDS_PADDING * 2,
-                maxY - minY + BOUNDS_PADDING * 2);
+            return {
+                "points": points,
+                "outline": outline,
+                "obstacle": obstacle,
+                "bounds": bounds
+            };
         }
 
         private function validPoint(point:Point):Boolean {
@@ -255,14 +264,14 @@ package wotstat.spottingpoints {
         }
 
         private function chooseLayoutPlan(
-                items:Array, vehicleBounds:Rectangle,
-                avoidanceBounds:Array, width:Number,
-                height:Number):Object {
+                items:Array, obstacles:Array, width:Number,
+                height:Number, collectDebug:Boolean):Object {
             var best:Object = null;
             for each (var item:Object in items) {
+                var debugCandidates:Array = collectDebug ? [] : null;
                 var candidate:Object = buildLayoutPlan(
-                    items, item, vehicleBounds, avoidanceBounds,
-                    width, height);
+                    items, item, obstacles, width, height,
+                    debugCandidates);
                 if (candidate != null && (best == null ||
                         Number(candidate.score) < Number(best.score) ||
                         (Number(candidate.score) == Number(best.score) &&
@@ -272,32 +281,34 @@ package wotstat.spottingpoints {
                 }
             }
             if (best == null) {
+                debugCandidates = collectDebug ? [] : null;
                 best = buildLayoutPlan(
-                    items, null, vehicleBounds, avoidanceBounds,
-                    width, height);
+                    items, null, obstacles, width, height,
+                    debugCandidates);
             }
             return best;
         }
 
         private function buildLayoutPlan(
-                items:Array, topItem:Object, vehicleBounds:Rectangle,
-                avoidanceBounds:Array, width:Number,
-                height:Number):Object {
+                items:Array, topItem:Object, obstacles:Array, width:Number,
+                height:Number, debugCandidates:Array):Object {
             var plan:Object = {
                 "placements": [],
                 "score": 0,
-                "signature": ""
+                "signature": "",
+                "candidates": debugCandidates
             };
             var occupied:Array = [];
             if (topItem != null) {
                 var top:Object = topPlacement(
-                    topItem, vehicleBounds, width, height);
+                    topItem, obstacles, width, height,
+                    debugCandidates);
                 if (top == null) {
                     return null;
                 }
                 appendPlannedPlacement(
                     plan, topItem, top, occupied,
-                    avoidanceBounds, false);
+                    obstacles, false);
             }
 
             var left:Array = [];
@@ -309,16 +320,16 @@ package wotstat.spottingpoints {
                 var side:String = preferredSide(item, width);
                 (side == "left" ? left : right).push(item);
             }
-            planSide(left, "left", avoidanceBounds, occupied,
-                     plan, width, height);
-            planSide(right, "right", avoidanceBounds, occupied,
-                     plan, width, height);
+            planSide(left, "left", obstacles, occupied,
+                     plan, width, height, debugCandidates);
+            planSide(right, "right", obstacles, occupied,
+                     plan, width, height, debugCandidates);
             return plan;
         }
 
         private function preferredSide(item:Object, width:Number):String {
             var marker:SpotPointMarker = item.marker as SpotPointMarker;
-            var bounds:Rectangle = item.avoidance as Rectangle;
+            var bounds:Rectangle = item.avoidanceBounds as Rectangle;
             var leftUsable:Boolean = sideUsable(
                 "left", bounds, marker.calloutWidth, width);
             var rightUsable:Boolean = sideUsable(
@@ -355,23 +366,38 @@ package wotstat.spottingpoints {
                    (bounds.right + EDGE_OFFSET) >= calloutWidth;
         }
 
-        private function topPlacement(item:Object, bounds:Rectangle,
+        private function topPlacement(item:Object, obstacles:Array,
                                       width:Number,
-                                      height:Number):Object {
+                                      height:Number,
+                                      debugCandidates:Array):Object {
             var marker:SpotPointMarker = item.marker as SpotPointMarker;
             var boxX:Number = clamp(
                 Number(item.markerX) - marker.calloutWidth * 0.5,
                 SCREEN_MARGIN,
                 Math.max(SCREEN_MARGIN,
                          width - SCREEN_MARGIN - marker.calloutWidth));
+            var topEdge:Number = Number.POSITIVE_INFINITY;
+            for each (var obstacle:Array in obstacles) {
+                var span:Object = LayoutGeometry.verticalSpan(
+                    obstacle, boxX, boxX + marker.calloutWidth);
+                if (span != null) {
+                    topEdge = Math.min(topEdge, Number(span.min));
+                }
+            }
+            if (!isFinite(topEdge)) {
+                topEdge = Number(item.markerY);
+            }
             var boxY:Number = clamp(
-                bounds.top - EDGE_OFFSET - marker.calloutHeight,
+                topEdge - EDGE_OFFSET - marker.calloutHeight,
                 SCREEN_MARGIN,
                 Math.max(SCREEN_MARGIN,
                          height - SCREEN_MARGIN - marker.calloutHeight));
             var rect:Rectangle = new Rectangle(
                 boxX, boxY, marker.calloutWidth, marker.calloutHeight);
-            if (rect.intersects(bounds)) {
+            var valid:Boolean = !intersectsObstacles(rect, obstacles);
+            recordDebugCandidate(
+                debugCandidates, item, rect, "top", valid);
+            if (!valid) {
                 return null;
             }
             return {
@@ -383,9 +409,10 @@ package wotstat.spottingpoints {
         }
 
         private function planSide(items:Array, side:String,
-                                  avoidanceBounds:Array, occupied:Array,
+                                  obstacles:Array, occupied:Array,
                                   plan:Object, width:Number,
-                                  height:Number):void {
+                                  height:Number,
+                                  debugCandidates:Array):void {
             if (items.length == 0) {
                 return;
             }
@@ -421,30 +448,37 @@ package wotstat.spottingpoints {
                 var chosenSide:String = side;
                 var blocked:Boolean = false;
                 var placement:Object = findSidePlacement(
-                    item, chosenSide, Number(item.slotY), avoidanceBounds,
-                    occupied, width, height);
+                    item, chosenSide, Number(item.slotY), obstacles,
+                    occupied, width, height, debugCandidates);
                 if (placement == null) {
                     chosenSide = side == "left" ? "right" : "left";
                     placement = findSidePlacement(
                         item, chosenSide, Number(item.slotY),
-                        avoidanceBounds, occupied, width, height);
+                        obstacles, occupied, width, height,
+                        debugCandidates);
                 }
                 if (placement == null) {
                     chosenSide = side;
                     placement = sidePlacement(
                         item, chosenSide, Number(item.slotY),
-                        avoidanceBounds, width, height, true);
-                    blocked = true;
+                        obstacles, width, height);
+                    blocked = Boolean(placement.blocked) ||
+                        overlapsLabels(
+                            placement.rect as Rectangle, occupied);
+                    recordDebugCandidate(
+                        debugCandidates, item,
+                        placement.rect as Rectangle,
+                        chosenSide, !blocked);
                 }
                 appendPlannedPlacement(
                     plan, item, placement, occupied,
-                    avoidanceBounds, blocked);
+                    obstacles, blocked);
             }
         }
 
         private function appendPlannedPlacement(
                 plan:Object, item:Object, placement:Object,
-                occupied:Array, avoidanceBounds:Array,
+                occupied:Array, obstacles:Array,
                 blocked:Boolean):void {
             var marker:SpotPointMarker = item.marker as SpotPointMarker;
             var rect:Rectangle = placement.rect as Rectangle;
@@ -457,7 +491,8 @@ package wotstat.spottingpoints {
                 cost *= TOP_LEADER_WEIGHT;
             }
             plan.score += cost;
-            if (blocked || isBlocked(rect, occupied, avoidanceBounds)) {
+            if (blocked || Boolean(placement.blocked) ||
+                    isBlocked(rect, occupied, obstacles)) {
                 plan.score += BLOCKED_PLACEMENT_PENALTY;
             }
             plan.signature += "|" + marker.pointId + ":" +
@@ -498,8 +533,10 @@ package wotstat.spottingpoints {
 
         private function findSidePlacement(
                 item:Object, side:String, desiredY:Number,
-                avoidanceBounds:Array, occupied:Array,
-                width:Number, height:Number):Object {
+                obstacles:Array, occupied:Array,
+                width:Number, height:Number,
+                debugCandidates:Array):Object {
+            var selected:Object = null;
             for (var attempt:int = 0; attempt < MAX_SLOT_ATTEMPTS;
                     attempt++) {
                 var distance:Number = Math.ceil(attempt * 0.5) * CALLOUT_GAP;
@@ -507,35 +544,52 @@ package wotstat.spottingpoints {
                     (attempt % 2 == 1 ? -1 : 1);
                 var centerY:Number = desiredY + distance * direction;
                 var placement:Object = sidePlacement(
-                    item, side, centerY, avoidanceBounds,
-                    width, height, false);
-                if (placement != null && !overlapsLabels(
-                        placement.rect as Rectangle, occupied)) {
-                    return placement;
+                    item, side, centerY, obstacles, width, height);
+                var valid:Boolean = !Boolean(placement.blocked) &&
+                    !overlapsLabels(
+                        placement.rect as Rectangle, occupied);
+                recordDebugCandidate(
+                    debugCandidates, item,
+                    placement.rect as Rectangle,
+                    side, valid);
+                if (valid && selected == null) {
+                    selected = placement;
+                    if (debugCandidates == null) {
+                        return selected;
+                    }
+                }
+                if (selected != null && debugCandidates != null &&
+                        attempt + 1 >= DEBUG_SLOT_ATTEMPTS) {
+                    return selected;
                 }
             }
-            return null;
+            return selected;
         }
 
         private function sidePlacement(
                 item:Object, side:String, centerY:Number,
-                avoidanceBounds:Array, width:Number, height:Number,
-                allowBlocked:Boolean):Object {
+                obstacles:Array, width:Number, height:Number):Object {
             var marker:SpotPointMarker = item.marker as SpotPointMarker;
             var halfHeight:Number = marker.calloutHeight * 0.5;
             centerY = clamp(
                 centerY, SCREEN_MARGIN + halfHeight,
                 height - SCREEN_MARGIN - halfHeight);
             var boxY:Number = centerY - halfHeight;
+            var groupSpan:Object = LayoutGeometry.horizontalSpan(
+                item.avoidance as Array, boxY,
+                boxY + marker.calloutHeight);
             var edgeX:Number = side == "left" ?
-                Rectangle(item.avoidance).left - EDGE_OFFSET :
-                Rectangle(item.avoidance).right + EDGE_OFFSET;
-            for each (var bounds:Rectangle in avoidanceBounds) {
-                if (boxY < bounds.bottom &&
-                        boxY + marker.calloutHeight > bounds.top) {
+                (groupSpan != null ? Number(groupSpan.min) :
+                 Number(item.markerX)) - EDGE_OFFSET :
+                (groupSpan != null ? Number(groupSpan.max) :
+                 Number(item.markerX)) + EDGE_OFFSET;
+            for each (var obstacle:Array in obstacles) {
+                var span:Object = LayoutGeometry.horizontalSpan(
+                    obstacle, boxY, boxY + marker.calloutHeight);
+                if (span != null) {
                     edgeX = side == "left" ?
-                        Math.min(edgeX, bounds.left - EDGE_OFFSET) :
-                        Math.max(edgeX, bounds.right + EDGE_OFFSET);
+                        Math.min(edgeX, Number(span.min) - EDGE_OFFSET) :
+                        Math.max(edgeX, Number(span.max) + EDGE_OFFSET);
                 }
             }
             var boxX:Number = side == "left" ?
@@ -546,29 +600,44 @@ package wotstat.spottingpoints {
                          width - SCREEN_MARGIN - marker.calloutWidth));
             var rect:Rectangle = new Rectangle(
                 boxX, boxY, marker.calloutWidth, marker.calloutHeight);
-            if (!allowBlocked) {
-                for each (bounds in avoidanceBounds) {
-                    if (rect.intersects(bounds)) {
-                        return null;
-                    }
-                }
-            }
             return {
                 "x": boxX,
                 "y": boxY,
                 "placement": side,
-                "rect": rect
+                "rect": rect,
+                "blocked": intersectsObstacles(rect, obstacles)
             };
         }
 
         private function isBlocked(rect:Rectangle, occupied:Array,
-                                   avoidanceBounds:Array):Boolean {
-            for each (var bounds:Rectangle in avoidanceBounds) {
-                if (rect.intersects(bounds)) {
+                                   obstacles:Array):Boolean {
+            return intersectsObstacles(rect, obstacles) ||
+                   overlapsLabels(rect, occupied);
+        }
+
+        private function intersectsObstacles(rect:Rectangle,
+                                             obstacles:Array):Boolean {
+            for each (var obstacle:Array in obstacles) {
+                if (LayoutGeometry.rectangleIntersectsPolygon(
+                        rect, obstacle)) {
                     return true;
                 }
             }
-            return overlapsLabels(rect, occupied);
+            return false;
+        }
+
+        private function recordDebugCandidate(
+                values:Array, item:Object, rect:Rectangle, placement:String,
+                valid:Boolean):void {
+            if (values == null || rect == null) {
+                return;
+            }
+            values.push({
+                "pointId": SpotPointMarker(item.marker).pointId,
+                "rect": rect.clone(),
+                "placement": placement,
+                "valid": valid
+            });
         }
 
         private function overlapsLabels(rect:Rectangle,
@@ -607,6 +676,7 @@ package wotstat.spottingpoints {
         override protected function onDispose():void {
             markers = null;
             layoutAnchors = null;
+            debugOverlay = null;
             super.onDispose();
         }
     }

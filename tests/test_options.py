@@ -18,6 +18,7 @@ class DisplayOptionsTests(unittest.TestCase):
             'showUiPoints': False,
             'showGuides': False,
             'allowTurretRotation': False,
+            'layoutDebug': False,
         })
         self.assertFalse(options.hasVisuals())
 
@@ -58,6 +59,14 @@ class DisplayOptionsTests(unittest.TestCase):
 
         self.assertFalse(options.setValue('unknown', True))
         self.assertFalse(hasattr(options, 'unknown'))
+
+    def test_layout_debug_does_not_start_visuals_by_itself(self):
+        from wotstat_spotting_points.options import DisplayOptions
+        options = DisplayOptions()
+
+        self.assertTrue(options.setValue('layoutDebug', True))
+        self.assertTrue(options.layoutDebug)
+        self.assertFalse(options.hasVisuals())
 
 
 if __name__ == '__main__':

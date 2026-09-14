@@ -198,6 +198,10 @@ class MarkerOverlayView(View):
     def updateSceneActive(self):
         return self._ready and self._sceneActive
 
+    def setLayoutDebug(self, value):
+        if self._ready:
+            self.flashObject.as_setLayoutDebug(bool(value))
+
     def _onWindowStatusChanged(self, uniqueId, status):
         self._refreshSceneActive()
 
