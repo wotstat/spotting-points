@@ -56,6 +56,32 @@ class SideLayoutTests(unittest.TestCase):
         self.assertEqual(placement['leader'][0], [600, -1000])
         self.assertGreaterEqual(placement['rect'][1], 0)
 
+    def test_crowded_side_keeps_screen_order_when_a_middle_row_is_full(self):
+        items = [item('a', 796, 372), item('b', 735, 402),
+                 item('c', 711, 380), item('short', 877, 354),
+                 item('d', 813, 387)]
+        placements = dict((p['id'], p) for p in self.solve(items)['placements'])
+        ordered = [placements[p['id']] for p in sorted(items, key=lambda p: p['y'])]
+        for above, below in zip(ordered, ordered[1:]):
+            self.assertLessEqual(above['rect'][1] + above['rect'][3] + 6,
+                                 below['rect'][1])
+        self.assertTrue(all(p[1] == 354 for p in placements['short']['leader']))
+
+    def test_depth_does_not_override_screen_order(self):
+        items = [dict(item('short', 890, 380), depth=10.0),
+                 dict(item('far-below', 720, 384), depth=15.0),
+                 dict(item('near-above', 760, 376), depth=5.0)]
+        placements = dict((p['id'], p) for p in self.solve(items)['placements'])
+        self.assertLess(placements['near-above']['rect'][1], placements['short']['rect'][1])
+        self.assertGreater(placements['far-below']['rect'][1], placements['short']['rect'][1])
+
+    def test_non_conflicting_rows_stay_horizontal(self):
+        items = [item('upper', 720, 290), item('short', 890, 380),
+                 item('lower', 760, 500)]
+        for placement in self.solve(items)['placements']:
+            self.assertTrue(all(p[1] == placement['leader'][0][1]
+                                for p in placement['leader']))
+
 
 if __name__ == '__main__':
     unittest.main()
