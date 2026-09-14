@@ -197,6 +197,8 @@ class MarkerOverlayView(View):
             'cacheHits': self._layoutCacheHits,
             'cacheMisses': self._layoutCacheMisses,
             'candidateCount': self._layoutSolver.candidateCount,
+            'stablePlanHits': self._layoutSolver.stablePlanHits,
+            'fullSearches': self._layoutSolver.fullSearches,
             'cachedCallbacks': _sampleStats(self._layoutCachedSamples),
             'changedSolves': _sampleStats(self._layoutChangedSamples)
         }

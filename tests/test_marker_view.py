@@ -194,6 +194,8 @@ class MarkerViewTests(unittest.TestCase):
         self.assertEqual(cached, {'revision': 1})
         self.assertEqual(stats['cacheHits'], 1)
         self.assertEqual(stats['cacheMisses'], 1)
+        self.assertEqual(stats['fullSearches'], 1)
+        self.assertEqual(stats['stablePlanHits'], 0)
         self.assertEqual(stats['cachedCallbacks']['count'], 1)
         self.assertEqual(stats['changedSolves']['count'], 1)
         self.assertGreater(stats['candidateCount'], 0)

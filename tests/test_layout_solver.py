@@ -56,7 +56,17 @@ class LayoutSolverTests(unittest.TestCase):
     def test_solver_can_use_multiple_top_placements(self):
         from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
 
-        result = CalloutLayoutSolver().solve(
+        class CountingSolver(CalloutLayoutSolver):
+            def __init__(self):
+                CalloutLayoutSolver.__init__(self)
+                self.pairScoreCalls = 0
+
+            def _pairScore(self, first, second):
+                self.pairScoreCalls += 1
+                return CalloutLayoutSolver._pairScore(self, first, second)
+
+        solver = CountingSolver()
+        result = solver.solve(
             640.0, 400.0,
             self._box(80.0, 150.0, 560.0, 300.0),
             self._box(220.0, 110.0, 420.0, 210.0),
@@ -70,6 +80,7 @@ class LayoutSolverTests(unittest.TestCase):
                     if placement['lane'] == 'top']
         self.assertEqual(len(topRects), len(set(tuple(rect)
                                                 for rect in topRects)))
+        self.assertLess(solver.pairScoreCalls, 250)
 
     def test_solver_returns_complete_plan_inside_forbidden_zone(self):
         from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
@@ -123,6 +134,16 @@ class LayoutSolverTests(unittest.TestCase):
 
         self.assertEqual(first['revision'], 1)
         self.assertEqual(cached, {'revision': 1})
+        firstChoice = dict(solver._lastChoiceByPointId)
+        shiftedHull = [(point[0] + 0.5, point[1]) for point in hull]
+        shiftedTurret = [(point[0] + 0.5, point[1])
+                         for point in turret]
+        shiftedItems = [dict(items[0], x=items[0]['x'] + 0.5)]
+        shifted = solver.solve(
+            400.0, 300.0, shiftedHull, shiftedTurret, shiftedItems)
+        self.assertEqual(solver.candidateCount, 1)
+        self.assertEqual(solver._lastChoiceByPointId, firstChoice)
+        self.assertEqual(shifted['revision'], 2)
         selectedLane = first['placements'][0]['lane']
         sameLane = {'lane': selectedLane,
                     'leader': [(0.0, 0.0), (20.0, 0.0)]}
@@ -135,6 +156,27 @@ class LayoutSolverTests(unittest.TestCase):
         afterReset = solver.solve(400.0, 300.0, hull, turret, items)
         self.assertEqual(afterReset['revision'], 1)
         self.assertIn('placements', afterReset)
+
+    def test_stable_conflict_repairs_only_participating_labels(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        solver = CalloutLayoutSolver()
+        hull = self._box(120.0, 90.0, 280.0, 210.0)
+        turret = self._box(160.0, 60.0, 240.0, 140.0)
+        solver.solve(
+            400.0, 300.0, hull, turret,
+            [self._item('a', 150.0, 80.0, 100.0),
+             self._item('b', 250.0, 200.0, 100.0)])
+
+        result = solver.solve(
+            400.0, 300.0, hull, turret,
+            [self._item('a', 150.5, 80.0, 100.0),
+             self._item('b', 250.0, 80.5, 100.0)])
+
+        self.assertEqual(result['score'][2:7], [0, 0.0, 0, 0.0, 0])
+        self.assertEqual(solver.fullSearches, 1)
+        self.assertEqual(solver.stablePlanHits, 1)
+        self.assertLessEqual(solver.candidateCount, 32)
 
 
 if __name__ == '__main__':

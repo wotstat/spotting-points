@@ -10,7 +10,9 @@ TOP_HORIZONTAL_GAP = 12.0
 POINT_CLEARANCE_RADIUS = 10.0
 TOP_LEADER_WEIGHT = 1.15
 LANE_SWITCH_PENALTY = 180.0
-BEAM_WIDTH = 64
+RECONSIDER_DISTANCE_DELTA = 48.0
+MAX_REPAIR_PASSES = 2
+MAX_REPAIR_PAIR_SCORES = 192
 
 _INFLATE_SIDES = 8
 _INFLATE_RADIUS_SCALE = 1.082392200292394
@@ -100,6 +102,53 @@ def verticalSpan(points, minimumX, maximumX):
     return _range(values)
 
 
+def _buildSpanEdges(points):
+    horizontal = []
+    vertical = []
+    for index, start in enumerate(points):
+        end = points[(index + 1) % len(points)]
+        deltaX = end[0] - start[0]
+        deltaY = end[1] - start[1]
+        if abs(deltaY) > EPSILON:
+            slope = deltaX / deltaY
+            horizontal.append((min(start[1], end[1]),
+                               max(start[1], end[1]), slope,
+                               start[0] - slope * start[1]))
+        if abs(deltaX) > EPSILON:
+            slope = deltaY / deltaX
+            vertical.append((min(start[0], end[0]),
+                             max(start[0], end[0]), slope,
+                             start[1] - slope * start[0]))
+    return horizontal, vertical
+
+
+def _preparedSpan(points, edges, minimum, maximum, pointAxis,
+                  valueAxis):
+    minimumValue = None
+    maximumValue = None
+    for point in points:
+        if minimum - EPSILON <= point[pointAxis] <= maximum + EPSILON:
+            value = point[valueAxis]
+            minimumValue = value if minimumValue is None else min(
+                minimumValue, value)
+            maximumValue = value if maximumValue is None else max(
+                maximumValue, value)
+    boundaries = ((minimum,) if abs(maximum - minimum) <= EPSILON
+                  else (minimum, maximum))
+    for boundary in boundaries:
+        for edgeMinimum, edgeMaximum, slope, intercept in edges:
+            if (edgeMinimum - EPSILON <= boundary
+                    <= edgeMaximum + EPSILON):
+                value = slope * boundary + intercept
+                minimumValue = value if minimumValue is None else min(
+                    minimumValue, value)
+                maximumValue = value if maximumValue is None else max(
+                    maximumValue, value)
+    if minimumValue is None:
+        return None
+    return minimumValue, maximumValue
+
+
 def _clipPolygon(points, inside, intersection):
     if not points:
         return []
@@ -155,6 +204,13 @@ def polygonArea(points):
         following = points[(index + 1) % len(points)]
         total += point[0] * following[1] - point[1] * following[0]
     return abs(total) * 0.5
+
+
+def polygonBounds(points):
+    return (min(point[0] for point in points),
+            min(point[1] for point in points),
+            max(point[0] for point in points),
+            max(point[1] for point in points))
 
 
 def rectanglePolygonIntersectionArea(rectangle, polygon):
@@ -248,6 +304,11 @@ def _addScores(first, second):
                  for index in xrange(len(first)))
 
 
+def _subtractScores(first, second):
+    return tuple(first[index] - second[index]
+                 for index in xrange(len(first)))
+
+
 def _clamp(value, minimum, maximum):
     return max(minimum, min(maximum, value))
 
@@ -266,8 +327,12 @@ class CalloutLayoutSolver(object):
         self._signature = None
         self._lastResult = None
         self._lastLaneByPointId = {}
+        self._lastChoiceByPointId = {}
+        self._lastEvaluatedCostByPointId = {}
         self.lastChanged = False
         self.candidateCount = 0
+        self.stablePlanHits = 0
+        self.fullSearches = 0
 
     @property
     def revision(self):
@@ -278,8 +343,12 @@ class CalloutLayoutSolver(object):
         self._signature = None
         self._lastResult = None
         self._lastLaneByPointId.clear()
+        self._lastChoiceByPointId.clear()
+        self._lastEvaluatedCostByPointId.clear()
         self.lastChanged = False
         self.candidateCount = 0
+        self.stablePlanHits = 0
+        self.fullSearches = 0
 
     def solve(self, width, height, hullPoints, turretPoints, items):
         orderedItems = sorted(items, key=lambda item: str(item['id']))
@@ -294,14 +363,33 @@ class CalloutLayoutSolver(object):
         for pointId in tuple(self._lastLaneByPointId):
             if pointId not in currentIds:
                 del self._lastLaneByPointId[pointId]
+        for pointId in tuple(self._lastChoiceByPointId):
+            if pointId not in currentIds:
+                del self._lastChoiceByPointId[pointId]
+        for pointId in tuple(self._lastEvaluatedCostByPointId):
+            if pointId not in currentIds:
+                del self._lastEvaluatedCostByPointId[pointId]
 
-        plan = self._search(orderedItems, geometry, float(width),
-                            float(height))
+        plan = self._stablePlan(
+            orderedItems, geometry, float(width), float(height))
+        if plan is None:
+            plan = self._search(orderedItems, geometry, float(width),
+                                float(height))
+            evaluatedIds = currentIds
+            self.fullSearches += 1
+        else:
+            evaluatedIds = plan.pop('_evaluatedIds', set())
+            self.stablePlanHits += 1
         self._revision += 1
         self._signature = signature
         self.lastChanged = True
         for entry in plan['entries']:
             self._lastLaneByPointId[entry['id']] = entry['lane']
+            self._lastChoiceByPointId[entry['id']] = (
+                entry['lane'], entry['offsetIndex'])
+            if entry['id'] in evaluatedIds:
+                self._lastEvaluatedCostByPointId[entry['id']] = (
+                    entry['_localScore'][9])
         result = self._serializeResult(geometry, plan)
         self._lastResult = result
         return result
@@ -320,42 +408,235 @@ class CalloutLayoutSolver(object):
                            _quantize(item['height'])))
         return tuple(values)
 
+    def _stablePlan(self, items, geometry, width, height):
+        currentIds = set(str(item['id']) for item in items)
+        if not items or currentIds != set(self._lastChoiceByPointId):
+            return None
+        ordered = sorted(items, key=lambda item: (-float(item['width']),
+                                                  str(item['id'])))
+        entries = []
+        score = (0, 0.0, 0, 0.0, 0, 0.0, 0, 0, 0.0, 0.0)
+        sideSpanCache = {}
+        obstacles = (geometry['hull'], geometry['turret'])
+        for item in ordered:
+            lane, offsetIndex = self._lastChoiceByPointId[str(item['id'])]
+            multiplier = _OFFSETS[offsetIndex]
+            if lane == 'top':
+                candidate = self._topCandidate(
+                    item, multiplier, offsetIndex,
+                    obstacles, width, height)
+            else:
+                candidate = self._sideCandidate(
+                    item, lane, multiplier, offsetIndex,
+                    obstacles, width, height, sideSpanCache)
+            if candidate is None:
+                return None
+            entry = dict(candidate)
+            entry['id'] = str(item['id'])
+            entry['point'] = (float(item['x']), float(item['y']))
+            entry['_localScore'] = self._candidateScore(
+                item, entry, geometry, width, height)
+            entry['_signature'] = self._candidateSignature(entry)
+            score = _addScores(score, entry['_localScore'])
+            for existing in entries:
+                score = _addScores(
+                    score, self._expandPairScore(
+                        self._pairScore(existing, entry)))
+            entries.append(entry)
+        self.candidateCount = len(entries)
+        previousScore = self._lastResult['score']
+        worsened = self._stableScoreWorsened(score, previousScore)
+        reconsiderIds = set()
+        if worsened:
+            reconsiderIds.update(self._conflictingIds(entries))
+            if score[0]:
+                reconsiderIds.update(
+                    entry['id'] for entry in entries
+                    if entry['_localScore'][0])
+            if score[7]:
+                reconsiderIds.update(
+                    entry['id'] for entry in entries
+                    if entry['_localScore'][7])
+        if not reconsiderIds:
+            reconsiderIds.update(
+                entry['id'] for entry in entries
+                if entry['_localScore'][9]
+                > self._lastEvaluatedCostByPointId.get(
+                    entry['id'], entry['_localScore'][9])
+                + RECONSIDER_DISTANCE_DELTA)
+        if reconsiderIds:
+            candidateSets = {}
+            itemById = dict((str(item['id']), item) for item in items)
+            for pointId in sorted(reconsiderIds):
+                item = itemById[pointId]
+                candidates = self._buildCandidates(
+                    item, geometry, width, height)
+                self.candidateCount += len(candidates)
+                prepared = []
+                for candidate in candidates:
+                    entry = dict(candidate)
+                    entry['id'] = pointId
+                    entry['point'] = (float(item['x']), float(item['y']))
+                    entry['_localScore'] = self._candidateScore(
+                        item, entry, geometry, width, height)
+                    entry['_signature'] = self._candidateSignature(entry)
+                    prepared.append(entry)
+                prepared.sort(key=lambda entry: (entry['_localScore'],
+                                                 entry['_signature']))
+                candidateSets[pointId] = prepared
+            plan = self._repairPlan(
+                {'score': score,
+                 'signature': ''.join(entry['_signature']
+                                    for entry in entries),
+                 'entries': entries},
+                candidateSets, reconsiderIds)
+            score = plan['score']
+            entries = plan['entries']
+            worsened = self._stableScoreWorsened(score, previousScore)
+        if worsened:
+            return None
+        return {'score': score,
+                'signature': ''.join(entry['_signature']
+                                   for entry in entries),
+                'entries': entries,
+                '_evaluatedIds': reconsiderIds}
+
+    def _stableScoreWorsened(self, score, previousScore):
+        for countIndex in (0, 2, 4, 6, 7):
+            if score[countIndex] != previousScore[countIndex]:
+                return score[countIndex] > previousScore[countIndex]
+        return False
+
     def _search(self, items, geometry, width, height):
         ordered = sorted(items, key=lambda item: (-float(item['width']),
                                                   str(item['id'])))
-        plans = [{'score': (0, 0.0, 0, 0.0, 0, 0.0,
-                            0, 0, 0.0, 0.0),
-                  'signature': '', 'entries': []}]
+        zeroScore = (0, 0.0, 0, 0.0, 0, 0.0, 0, 0, 0.0, 0.0)
+        selected = []
+        score = zeroScore
+        candidateSets = {}
         self.candidateCount = 0
         for item in ordered:
             candidates = self._buildCandidates(
                 item, geometry, width, height)
             self.candidateCount += len(candidates)
-            expanded = []
+            prepared = []
             for candidate in candidates:
                 entry = dict(candidate)
                 entry['id'] = str(item['id'])
                 entry['point'] = (float(item['x']), float(item['y']))
-                localScore = self._candidateScore(
+                entry['_localScore'] = self._candidateScore(
                     item, entry, geometry, width, height)
-                signaturePart = self._candidateSignature(entry)
-                for plan in plans:
-                    score = _addScores(plan['score'], localScore)
-                    for existing in plan['entries']:
-                        score = _addScores(
-                            score, self._expandPairScore(
-                                self._pairScore(existing, entry)))
-                    expanded.append({
-                        'score': score,
-                        'signature': plan['signature'] + signaturePart,
-                        'entries': plan['entries'] + [entry]
-                    })
-            expanded.sort(key=lambda plan: (plan['score'],
-                                            plan['signature']))
-            plans = expanded[:BEAM_WIDTH]
-        return plans[0] if plans else {
-            'score': (0, 0.0, 0, 0.0, 0, 0.0, 0, 0, 0.0, 0.0),
-            'signature': '', 'entries': []}
+                entry['_signature'] = self._candidateSignature(entry)
+                prepared.append(entry)
+            prepared.sort(key=lambda entry: (entry['_localScore'],
+                                             entry['_signature']))
+            candidateSets[str(item['id'])] = prepared
+            bestEntry, bestScore = self._bestCandidate(
+                prepared, selected, score)
+            selected.append(bestEntry)
+            score = bestScore
+        plan = {'score': score,
+                'signature': ''.join(entry['_signature']
+                                   for entry in selected),
+                'entries': selected}
+        if any(score[index] for index in (2, 4, 6)):
+            plan = self._repairPlan(plan, candidateSets)
+        return plan
+
+    def _bestCandidate(self, candidates, selected, baseScore):
+        bestEntry = None
+        bestScore = None
+        for entry in candidates:
+            pairScore = (0, 0.0, 0, 0.0, 0)
+            for existing in selected:
+                pairScore = _addScores(
+                    pairScore, self._pairScore(existing, entry))
+            score = _addScores(
+                baseScore, _addScores(
+                    entry['_localScore'],
+                    self._expandPairScore(pairScore)))
+            if (bestScore is None or score < bestScore
+                    or (score == bestScore
+                        and entry['_signature'] < bestEntry['_signature'])):
+                bestEntry = entry
+                bestScore = score
+            if not any(pairScore[index] for index in (0, 2, 4)):
+                break
+        return bestEntry, bestScore
+
+    def _repairPlan(self, plan, candidateSets, reconsiderIds=None):
+        entries = list(plan['entries'])
+        score = plan['score']
+        evaluations = 0
+        reconsiderIds = set(reconsiderIds or ())
+        for unusedPass in xrange(MAX_REPAIR_PASSES):
+            conflicts = self._conflictingIds(entries)
+            conflicts.update(reconsiderIds)
+            reconsiderIds.clear()
+            if not conflicts:
+                break
+            improved = False
+            for index, current in enumerate(tuple(entries)):
+                if current['id'] not in conflicts:
+                    continue
+                candidates = candidateSets.get(current['id'])
+                if candidates is None:
+                    continue
+                others = entries[:index] + entries[index + 1:]
+                if evaluations + len(others) > MAX_REPAIR_PAIR_SCORES:
+                    break
+                removed = current['_localScore']
+                for other in others:
+                    removed = _addScores(
+                        removed, self._expandPairScore(
+                            self._pairScore(current, other)))
+                    evaluations += 1
+                baseScore = _subtractScores(score, removed)
+                bestEntry = current
+                bestScore = score
+                for candidate in candidates:
+                    if evaluations + len(others) > MAX_REPAIR_PAIR_SCORES:
+                        break
+                    pairScore = (0, 0.0, 0, 0.0, 0)
+                    for other in others:
+                        pairScore = _addScores(
+                            pairScore, self._pairScore(candidate, other))
+                        evaluations += 1
+                    candidateScore = _addScores(
+                        baseScore, _addScores(
+                            candidate['_localScore'],
+                            self._expandPairScore(pairScore)))
+                    if (candidateScore < bestScore
+                            or (candidateScore == bestScore
+                                and candidate['_signature']
+                                < bestEntry['_signature'])):
+                        bestEntry = candidate
+                        bestScore = candidateScore
+                    if (not any(pairScore[position]
+                               for position in (0, 2, 4))):
+                        break
+                if bestEntry is not current:
+                    entries[index] = bestEntry
+                    score = bestScore
+                    improved = True
+                if evaluations + len(others) > MAX_REPAIR_PAIR_SCORES:
+                    break
+            if not improved or evaluations >= MAX_REPAIR_PAIR_SCORES:
+                break
+        return {'score': score,
+                'signature': ''.join(entry['_signature']
+                                   for entry in entries),
+                'entries': entries}
+
+    def _conflictingIds(self, entries):
+        conflicts = set()
+        for index, first in enumerate(entries):
+            for second in entries[index + 1:]:
+                score = self._pairScore(first, second)
+                if any(score[position] for position in (0, 2, 4)):
+                    conflicts.add(first['id'])
+                    conflicts.add(second['id'])
+        return conflicts
 
     def _candidateScore(self, item, candidate, geometry, width, height):
         rectangle = candidate['rect']
@@ -370,6 +651,13 @@ class CalloutLayoutSolver(object):
         forbiddenCount = 0
         forbiddenArea = 0.0
         for part in ('hull', 'turret'):
+            bounds = geometry[part]['bounds']
+            boundsRectangle = (bounds[0], bounds[1],
+                               bounds[2] - bounds[0],
+                               bounds[3] - bounds[1])
+            if rectangleIntersectionArea(
+                    rectangle, boundsRectangle) <= EPSILON:
+                continue
             area = rectanglePolygonIntersectionArea(
                 rectangle, geometry[part]['obstacle'])
             if area > EPSILON:
@@ -413,10 +701,7 @@ class CalloutLayoutSolver(object):
                 0, 0.0, 0.0)
 
     def _candidateSignature(self, candidate):
-        return '|%s:%d:%s' % (
-            candidate['lane'], candidate['offsetIndex'],
-            ','.join(str(_quantize(value))
-                     for value in candidate['rect']))
+        return '|%s:%d' % (candidate['lane'], candidate['offsetIndex'])
 
     def _serializeResult(self, geometry, plan):
         placements = []
@@ -451,21 +736,26 @@ class CalloutLayoutSolver(object):
     def _buildPart(self, points):
         projected = _pointList(points)
         outline = convexHull(projected)
+        obstacle = inflateConvexPolygon(outline, BOUNDS_PADDING)
+        horizontalEdges, verticalEdges = _buildSpanEdges(obstacle)
         return {
             'points': projected,
             'outline': outline,
-            'obstacle': inflateConvexPolygon(outline, BOUNDS_PADDING)
+            'obstacle': obstacle,
+            'bounds': polygonBounds(obstacle),
+            'horizontalEdges': horizontalEdges,
+            'verticalEdges': verticalEdges
         }
 
     def _buildCandidates(self, item, geometry, width, height):
-        obstacles = (geometry['hull']['obstacle'],
-                     geometry['turret']['obstacle'])
+        obstacles = (geometry['hull'], geometry['turret'])
         candidates = []
+        sideSpanCache = {}
         for lane in ('left', 'right'):
             for offsetIndex, multiplier in enumerate(_OFFSETS):
                 candidate = self._sideCandidate(
                     item, lane, multiplier, offsetIndex,
-                    obstacles, width, height)
+                    obstacles, width, height, sideSpanCache)
                 if candidate is not None:
                     candidates.append(candidate)
         for offsetIndex, multiplier in enumerate(_OFFSETS):
@@ -475,8 +765,7 @@ class CalloutLayoutSolver(object):
         seen = set()
         for candidate in candidates:
             rectangle = candidate['rect']
-            key = ((candidate['lane'],) +
-                   tuple(_quantize(value) for value in rectangle))
+            key = (candidate['lane'],) + rectangle
             if key in seen:
                 continue
             seen.add(key)
@@ -485,7 +774,7 @@ class CalloutLayoutSolver(object):
         return deduplicated
 
     def _sideCandidate(self, item, lane, multiplier, offsetIndex,
-                       obstacles, width, height):
+                       obstacles, width, height, spanCache):
         markerX = float(item['x'])
         markerY = float(item['y'])
         calloutWidth = float(item['width'])
@@ -497,9 +786,14 @@ class CalloutLayoutSolver(object):
             max(SCREEN_MARGIN + halfHeight,
                 height - SCREEN_MARGIN - halfHeight))
         boxY = centerY - halfHeight
-        spans = [horizontalSpan(obstacle, boxY, boxY + calloutHeight)
-                 for obstacle in obstacles]
-        spans = [span for span in spans if span is not None]
+        spanKey = (boxY, calloutHeight)
+        spans = spanCache.get(spanKey)
+        if spans is None:
+            spans = [self._horizontalSpan(
+                obstacle, boxY, boxY + calloutHeight)
+                for obstacle in obstacles]
+            spans = [span for span in spans if span is not None]
+            spanCache[spanKey] = spans
         if lane == 'left':
             baseEdge = (min(span[0] for span in spans) - EDGE_OFFSET
                         if spans else markerX - EDGE_OFFSET)
@@ -545,7 +839,7 @@ class CalloutLayoutSolver(object):
             boxX, SCREEN_MARGIN,
             max(SCREEN_MARGIN,
                 width - SCREEN_MARGIN - calloutWidth))
-        spans = [verticalSpan(obstacle, boxX, boxX + calloutWidth)
+        spans = [self._verticalSpan(obstacle, boxX, boxX + calloutWidth)
                  for obstacle in obstacles]
         spans = [span for span in spans if span is not None]
         topEdge = min(span[0] for span in spans) if spans else markerY
@@ -563,3 +857,19 @@ class CalloutLayoutSolver(object):
             'leader': [(markerX, markerY),
                        (targetX, boxY + calloutHeight)]
         }
+
+    def _horizontalSpan(self, part, minimumY, maximumY):
+        bounds = part['bounds']
+        if maximumY < bounds[1] or minimumY > bounds[3]:
+            return None
+        return _preparedSpan(
+            part['obstacle'], part['horizontalEdges'],
+            minimumY, maximumY, 1, 0)
+
+    def _verticalSpan(self, part, minimumX, maximumX):
+        bounds = part['bounds']
+        if maximumX < bounds[0] or minimumX > bounds[2]:
+            return None
+        return _preparedSpan(
+            part['obstacle'], part['verticalEdges'],
+            minimumX, maximumX, 0, 1)
