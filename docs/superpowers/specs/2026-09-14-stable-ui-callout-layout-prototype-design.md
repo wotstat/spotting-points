@@ -84,10 +84,9 @@ No shared game resource is replaced and no global input handler is changed.
 
 Holding Alt while opening the settings window reveals a non-persistent
 `layoutDebug` checkbox. The overlay shows raw hull/turret corner projection,
-the inflated convex forbidden polygons, valid and rejected candidate label
-rectangles, the screen-safe area, and the selected complete plan. Debug drawing
-observes the same stateless solver inputs and results; it does not maintain or
-animate a second layout model.
+the inflated convex forbidden polygons and the selected complete plan. Debug
+drawing observes the same stateless solver inputs and results; it does not
+maintain or animate a second layout model.
 
 ## Validation
 

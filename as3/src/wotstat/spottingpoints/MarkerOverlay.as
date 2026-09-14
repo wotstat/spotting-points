@@ -15,7 +15,6 @@ package wotstat.spottingpoints {
         private static const TOP_LEADER_WEIGHT:Number = 4;
         private static const BLOCKED_PLACEMENT_PENALTY:Number = 1000000;
         private static const MAX_SLOT_ATTEMPTS:int = 16;
-        private static const DEBUG_SLOT_ATTEMPTS:int = 5;
 
         private var markers:Dictionary = new Dictionary();
         private var layoutAnchors:Dictionary = new Dictionary();
@@ -189,16 +188,14 @@ package wotstat.spottingpoints {
             ];
             items.sort(comparePointId);
             var plan:Object = chooseLayoutPlan(
-                items, obstacles, width, height, layoutDebug);
+                items, obstacles, width, height);
             if (plan != null) {
                 applyLayoutPlan(plan);
             }
             if (debugOverlay != null && layoutDebug) {
                 debugOverlay.render(
                     hullPart, turretPart,
-                    plan != null ? plan.candidates as Array : null,
-                    plan != null ? plan.placements as Array : null,
-                    width, height);
+                    plan != null ? plan.placements as Array : null);
             }
         }
 
@@ -265,13 +262,11 @@ package wotstat.spottingpoints {
 
         private function chooseLayoutPlan(
                 items:Array, obstacles:Array, width:Number,
-                height:Number, collectDebug:Boolean):Object {
+                height:Number):Object {
             var best:Object = null;
             for each (var item:Object in items) {
-                var debugCandidates:Array = collectDebug ? [] : null;
                 var candidate:Object = buildLayoutPlan(
-                    items, item, obstacles, width, height,
-                    debugCandidates);
+                    items, item, obstacles, width, height);
                 if (candidate != null && (best == null ||
                         Number(candidate.score) < Number(best.score) ||
                         (Number(candidate.score) == Number(best.score) &&
@@ -281,28 +276,24 @@ package wotstat.spottingpoints {
                 }
             }
             if (best == null) {
-                debugCandidates = collectDebug ? [] : null;
                 best = buildLayoutPlan(
-                    items, null, obstacles, width, height,
-                    debugCandidates);
+                    items, null, obstacles, width, height);
             }
             return best;
         }
 
         private function buildLayoutPlan(
                 items:Array, topItem:Object, obstacles:Array, width:Number,
-                height:Number, debugCandidates:Array):Object {
+                height:Number):Object {
             var plan:Object = {
                 "placements": [],
                 "score": 0,
-                "signature": "",
-                "candidates": debugCandidates
+                "signature": ""
             };
             var occupied:Array = [];
             if (topItem != null) {
                 var top:Object = topPlacement(
-                    topItem, obstacles, width, height,
-                    debugCandidates);
+                    topItem, obstacles, width, height);
                 if (top == null) {
                     return null;
                 }
@@ -321,9 +312,9 @@ package wotstat.spottingpoints {
                 (side == "left" ? left : right).push(item);
             }
             planSide(left, "left", obstacles, occupied,
-                     plan, width, height, debugCandidates);
+                     plan, width, height);
             planSide(right, "right", obstacles, occupied,
-                     plan, width, height, debugCandidates);
+                     plan, width, height);
             return plan;
         }
 
@@ -368,8 +359,7 @@ package wotstat.spottingpoints {
 
         private function topPlacement(item:Object, obstacles:Array,
                                       width:Number,
-                                      height:Number,
-                                      debugCandidates:Array):Object {
+                                      height:Number):Object {
             var marker:SpotPointMarker = item.marker as SpotPointMarker;
             var boxX:Number = clamp(
                 Number(item.markerX) - marker.calloutWidth * 0.5,
@@ -395,8 +385,6 @@ package wotstat.spottingpoints {
             var rect:Rectangle = new Rectangle(
                 boxX, boxY, marker.calloutWidth, marker.calloutHeight);
             var valid:Boolean = !intersectsObstacles(rect, obstacles);
-            recordDebugCandidate(
-                debugCandidates, item, rect, "top", valid);
             if (!valid) {
                 return null;
             }
@@ -411,8 +399,7 @@ package wotstat.spottingpoints {
         private function planSide(items:Array, side:String,
                                   obstacles:Array, occupied:Array,
                                   plan:Object, width:Number,
-                                  height:Number,
-                                  debugCandidates:Array):void {
+                                  height:Number):void {
             if (items.length == 0) {
                 return;
             }
@@ -449,13 +436,12 @@ package wotstat.spottingpoints {
                 var blocked:Boolean = false;
                 var placement:Object = findSidePlacement(
                     item, chosenSide, Number(item.slotY), obstacles,
-                    occupied, width, height, debugCandidates);
+                    occupied, width, height);
                 if (placement == null) {
                     chosenSide = side == "left" ? "right" : "left";
                     placement = findSidePlacement(
                         item, chosenSide, Number(item.slotY),
-                        obstacles, occupied, width, height,
-                        debugCandidates);
+                        obstacles, occupied, width, height);
                 }
                 if (placement == null) {
                     chosenSide = side;
@@ -465,10 +451,6 @@ package wotstat.spottingpoints {
                     blocked = Boolean(placement.blocked) ||
                         overlapsLabels(
                             placement.rect as Rectangle, occupied);
-                    recordDebugCandidate(
-                        debugCandidates, item,
-                        placement.rect as Rectangle,
-                        chosenSide, !blocked);
                 }
                 appendPlannedPlacement(
                     plan, item, placement, occupied,
@@ -534,9 +516,7 @@ package wotstat.spottingpoints {
         private function findSidePlacement(
                 item:Object, side:String, desiredY:Number,
                 obstacles:Array, occupied:Array,
-                width:Number, height:Number,
-                debugCandidates:Array):Object {
-            var selected:Object = null;
+                width:Number, height:Number):Object {
             for (var attempt:int = 0; attempt < MAX_SLOT_ATTEMPTS;
                     attempt++) {
                 var distance:Number = Math.ceil(attempt * 0.5) * CALLOUT_GAP;
@@ -548,22 +528,11 @@ package wotstat.spottingpoints {
                 var valid:Boolean = !Boolean(placement.blocked) &&
                     !overlapsLabels(
                         placement.rect as Rectangle, occupied);
-                recordDebugCandidate(
-                    debugCandidates, item,
-                    placement.rect as Rectangle,
-                    side, valid);
-                if (valid && selected == null) {
-                    selected = placement;
-                    if (debugCandidates == null) {
-                        return selected;
-                    }
-                }
-                if (selected != null && debugCandidates != null &&
-                        attempt + 1 >= DEBUG_SLOT_ATTEMPTS) {
-                    return selected;
+                if (valid) {
+                    return placement;
                 }
             }
-            return selected;
+            return null;
         }
 
         private function sidePlacement(
@@ -624,20 +593,6 @@ package wotstat.spottingpoints {
                 }
             }
             return false;
-        }
-
-        private function recordDebugCandidate(
-                values:Array, item:Object, rect:Rectangle, placement:String,
-                valid:Boolean):void {
-            if (values == null || rect == null) {
-                return;
-            }
-            values.push({
-                "pointId": SpotPointMarker(item.marker).pointId,
-                "rect": rect.clone(),
-                "placement": placement,
-                "valid": valid
-            });
         }
 
         private function overlapsLabels(rect:Rectangle,
