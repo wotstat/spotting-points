@@ -215,7 +215,7 @@ rather than an exhaustive product of candidates.
 - For the next label, candidates are compared against already selected labels.
   Evaluation stops at the first candidate without a pairwise conflict because
   no later candidate can improve its higher-priority score components.
-- If the completed pass still contains a pairwise conflict, at most two repair
+- If the completed pass still contains a pairwise conflict, at most three repair
   passes reconsider only participating labels. Repair is capped at 192 pair
   scores.
 - The resulting complete plan is applied atomically.
