@@ -111,10 +111,23 @@ class SideLayoutTests(unittest.TestCase):
             1400, 900, box(300, 250, 900, 550), box(500, 220, 700, 420),
             items)
 
-    def test_even_roof_point_uses_horizontal_side_projection(self):
+    def test_roof_point_uses_shorter_vertical_projection(self):
         placement = self.solve([item('top', 600, 255)])['placements'][0]
+        self.assertEqual(placement['lane'], 'top')
+        self.assertTrue(all(p[0] == 600 for p in placement['leader']))
+        rect = placement['rect']
+        self.assertEqual(placement['leader'][-1],
+                         [rect[0] + rect[2] * 0.5, rect[1] + rect[3]])
+        self.assertLess(rect[1] + rect[3], 220)
+
+    def test_roof_point_keeps_side_when_vertical_projection_is_longer(self):
+        placement = self.solve([item('top', 310, 400)])['placements'][0]
+        self.assertEqual(placement['lane'], 'left')
+        self.assertTrue(all(p[1] == 400 for p in placement['leader']))
+
+    def test_other_points_do_not_take_the_roof_slot(self):
+        placement = self.solve([item('gunMoving', 600, 255)])['placements'][0]
         self.assertIn(placement['lane'], ('left', 'right'))
-        self.assertTrue(all(p[1] == 255 for p in placement['leader']))
 
     def test_shortest_line_stays_straight_and_longer_labels_keep_order(self):
         result = self.solve([item('long-above', 720, 378),

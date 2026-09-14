@@ -73,7 +73,8 @@ class CalloutTransitions(object):
         displayed = dict(target)
         displayed['rect'] = interpolate(startBox, endBox) + target['rect'][2:]
         displayed['leader'] = [list(anchor)]
-        for index in xrange(1, len(endLeader)):
+        for index in xrange(1, max(len(startLeader), len(endLeader))):
             displayed['leader'].append(interpolate(
-                startLeader[min(index, len(startLeader) - 1)], endLeader[index]))
+                startLeader[min(index, len(startLeader) - 1)],
+                endLeader[min(index, len(endLeader) - 1)]))
         return displayed

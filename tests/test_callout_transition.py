@@ -17,6 +17,18 @@ def layout(x, y=288.0, lane='left', anchor=(400.0, 300.0)):
 
 
 class CalloutTransitionTests(unittest.TestCase):
+    def test_transition_to_vertical_leader_keeps_the_previous_line_at_start(self):
+        renderer = CalloutTransitions()
+        initial = layout(100)
+        renderer.apply(initial, 0)
+        target = dict(revision=2, placements=[dict(
+            id='a', lane='top', rect=[330., 180., 140., 24.],
+            leader=[[400., 300.], [400., 204.]])])
+        start = renderer.apply(target, 1)['placements'][0]
+        self.assertEqual(start['leader'], initial['placements'][0]['leader'])
+        self.assertEqual(renderer.apply({'revision': 2}, 1.3)['placements'][0],
+                         target['placements'][0])
+
     def test_initial_placement_and_small_motion_are_immediate(self):
         renderer = CalloutTransitions()
         self.assertEqual(renderer.apply(layout(100), 0)['placements'][0]['rect'][0], 100)

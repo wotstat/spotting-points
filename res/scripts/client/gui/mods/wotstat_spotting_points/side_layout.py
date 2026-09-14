@@ -3,7 +3,7 @@ import time
 from .layout_solver import (CALLOUT_GAP, EPSILON, SCREEN_MARGIN,
                             CalloutLayoutSolver, _clamp, _octilinearLeader,
                             rectangleIntersectionArea, _polylinesIntersect,
-                            _polylineLength)
+                            _polylineLength, rectanglePolygonIntersectionArea)
 
 
 LABEL_GAP = 6.0
@@ -44,6 +44,8 @@ class SideLayoutSolver(CalloutLayoutSolver):
 
         def candidate(item, lane, centerY):
             self.candidateCount += 1
+            if lane == 'top':
+                return self._verticalCandidate(item, obstacles, float(width), float(height))
             return self._sideCandidate(
                 item, lane, (centerY - float(item['y'])) / CALLOUT_GAP,
                 0, obstacles, float(width), float(height), spanCache)
@@ -69,6 +71,11 @@ class SideLayoutSolver(CalloutLayoutSolver):
                         side['leader'][-1])
             baseline = min(sides, key=lambda side: (
                 _polylineLength(side['leader']), side['lane']))
+            if str(item['id']) == 'top':
+                above = candidate(item, 'top', float(item['y']))
+                if (above is not None and _polylineLength(above['leader']) + EPSILON
+                        < _polylineLength(baseline['leader'])):
+                    baseline = above
             pending.append((_polylineLength(baseline['leader']),
                             str(item['id']), item, baseline))
 
@@ -154,6 +161,20 @@ class SideLayoutSolver(CalloutLayoutSolver):
         self._lastResult = self._serializeResult(
             geometry, {'entries': placed, 'score': ()})
         return self._lastResult
+
+    def _verticalCandidate(self, item, obstacles, width, height):
+        if str(item['id']) != 'top':
+            return None
+        entry = self._topCandidate(item, 0, 0, obstacles, width, height)
+        rect = entry['rect']
+        # Reject edge clamping that would bend the vertical line or put the
+        # label into the vehicle. Side slots remain available in those cases.
+        if (abs(rect[0] + rect[2] * 0.5 - float(item['x'])) > EPSILON
+                or rect[1] + rect[3] >= float(item['y'])
+                or any(rectanglePolygonIntersectionArea(rect, obstacle['obstacle'])
+                       > EPSILON for obstacle in obstacles)):
+            return None
+        return entry
 
     def _stabilityScore(self, entries):
         overlap = 0.0
