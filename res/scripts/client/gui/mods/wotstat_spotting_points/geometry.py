@@ -142,11 +142,18 @@ def buildHighlightGroups(lines):
         lines[2].points[1], lines[2].points[0], lines[1].points[0]])
     frontCross = [_lineSegment(lines[5], 1), _lineSegment(lines[6], 2)]
     rearCross = [_lineSegment(lines[5], 3), _lineSegment(lines[6], 0)]
+    leftCross = [_lineSegment(lines[5], 0), _lineSegment(lines[6], 1)]
+    rightCross = [_lineSegment(lines[5], 2), _lineSegment(lines[6], 3)]
+    axis = lines[8]
+    axisCenter = tuple((axis.points[0][i] + axis.points[1][i]) * 0.5
+                       for i in range(3))
+    leftAxis = _faceLine(axis, [axisCenter, axis.points[0]])
+    rightAxis = _faceLine(axis, [axisCenter, axis.points[1]])
     groups = {
         'rear': [rearFace] + rearCross,
         'front': [frontFace] + frontCross,
-        'left': [leftFace] + list(lines[7:9]),
-        'right': [rightFace] + list(lines[8:10]),
+        'left': [leftFace] + leftCross + [lines[7], leftAxis],
+        'right': [rightFace] + rightCross + [rightAxis, lines[9]],
         'gunStatic': [lines[8]],
         'top': [lines[0]],
         'gunMoving': [lines[8]] + list(lines[13:]),

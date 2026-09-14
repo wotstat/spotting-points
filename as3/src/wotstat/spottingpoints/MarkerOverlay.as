@@ -47,6 +47,9 @@ package wotstat.spottingpoints {
             marker.setCalloutsEnabled(calloutsEnabled);
             markers[id] = marker;
             addChild(marker);
+            if (!marker.isObservationPoint) {
+                setChildIndex(marker, debugOverlay != null ? 1 : 0);
+            }
             return marker;
         }
 
@@ -83,8 +86,9 @@ package wotstat.spottingpoints {
             }
             var stageX:Number = (cursorX + 1) * App.appWidth * 0.5;
             var stageY:Number = (1 - cursorY) * App.appHeight * 0.5;
-            for each (var marker:SpotPointMarker in markers) {
-                if (marker.visible && marker.hitTestUi(stageX, stageY)) {
+            for (var index:int = numChildren - 1; index >= 0; index--) {
+                var marker:SpotPointMarker = getChildAt(index) as SpotPointMarker;
+                if (marker != null && marker.visible && marker.hitTestUi(stageX, stageY)) {
                     return marker.pointId;
                 }
             }

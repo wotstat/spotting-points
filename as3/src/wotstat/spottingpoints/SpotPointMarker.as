@@ -44,14 +44,25 @@ package wotstat.spottingpoints {
 
             ring = new Shape();
             ring.graphics.lineStyle(1.5, 0xFFF2B2, 0.72);
-            ring.graphics.drawCircle(0, 0, DOT_RADIUS + 2);
+            if (isObservationPoint) {
+                ring.graphics.drawRect(-6, -6, 12, 12);
+                ring.rotation = 45;
+            } else {
+                ring.graphics.drawCircle(0, 0, DOT_RADIUS + 2);
+            }
             ring.alpha = 0.72;
             addChild(ring);
 
             dot = new Shape();
             dot.graphics.lineStyle(2, 0xFFF5C9, 1);
             dot.graphics.beginFill(0x22252A, 0.96);
-            dot.graphics.drawCircle(0, 0, DOT_RADIUS);
+            if (isObservationPoint) {
+                dot.graphics.drawRect(-DOT_RADIUS, -DOT_RADIUS,
+                                      DOT_RADIUS * 2, DOT_RADIUS * 2);
+                dot.rotation = 45;
+            } else {
+                dot.graphics.drawCircle(0, 0, DOT_RADIUS);
+            }
             dot.graphics.endFill();
             addChild(dot);
 
@@ -86,6 +97,10 @@ package wotstat.spottingpoints {
             setLabel(label);
             persistentCallout = showCallout;
             updateCalloutVisibility();
+        }
+
+        public function get isObservationPoint():Boolean {
+            return pointId == "top" || pointId == "gunMoving";
         }
 
         public function setHovered(value:Boolean):void {
