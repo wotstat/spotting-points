@@ -1,4 +1,4 @@
-TRANSITION_SECONDS = 0.18
+TRANSITION_SECONDS = 0.25
 
 
 def _offsetY(entry):
