@@ -19,6 +19,7 @@ from vehicle_systems.tankStructure import TankNodeNames, TankPartNames
 
 from .marker_logic import buildOverlayData, isOverlaySceneActive
 from .side_layout import SideLayoutSolver
+from .callout_transition import CalloutTransitions
 
 VIEW_ALIAS = 'wotstatSpottingPointsMarkerOverlay'
 VIEW_SWF = 'wotstatSpottingPointsMarkers.swf'
@@ -149,6 +150,7 @@ class MarkerOverlayView(View):
 
     def _initializeLayoutSolver(self):
         self._layoutSolver = SideLayoutSolver()
+        self._layoutTransitions = CalloutTransitions()
         self._layoutSolverFailed = False
         self._layoutCachedSamples = deque(maxlen=240)
         self._layoutChangedSamples = deque(maxlen=240)
@@ -177,7 +179,7 @@ class MarkerOverlayView(View):
                 self._layoutCacheHits += 1
                 self._layoutCachedSamples.append(
                     (time.clock() - callbackStarted) * 1000.0)
-            return result
+            return self._layoutTransitions.apply(result, time.clock())
         except Exception:
             self._layoutSolverFailed = True
             log.exception('Callout layout solver stopped after error')
@@ -299,6 +301,7 @@ class MarkerOverlayView(View):
         if not self._ready:
             return
         self._layoutSolver.reset()
+        self._layoutTransitions.reset()
         for pointId in tuple(self._nativeMarkers):
             self._removeMarker(pointId)
         for anchorId in tuple(self._layoutMarkers):
