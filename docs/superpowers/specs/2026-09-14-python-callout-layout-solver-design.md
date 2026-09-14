@@ -145,8 +145,11 @@ Each candidate stores its finished screen-space polyline.
   the diagonal to go either up or down; top candidates keep the domain nonempty
   if screen bounds eliminate every side candidate.
 - A top leader terminates at the center of the label's lower edge. It consumes
-  the smaller screen-space delta with a diagonal segment at exactly 45 degrees,
-  then completes the remaining delta with one horizontal or vertical segment.
+  the smaller screen-space delta with a diagonal segment at exactly 45 degrees
+  and the remainder with one horizontal or vertical segment. For a
+  vertical-dominant route the diagonal comes first; for a horizontal-dominant
+  route the horizontal remainder comes first, so the label is first touched
+  only by the final diagonal at the lower-edge center.
 
 `SpotPointMarker.as` receives and draws this returned polyline verbatim. It no
 longer independently reconstructs an elbow, preventing scoring and rendering

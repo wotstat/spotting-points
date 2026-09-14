@@ -324,18 +324,20 @@ def _pointList(points):
 def _octilinearLeader(start, target):
     deltaX = target[0] - start[0]
     deltaY = target[1] - start[1]
-    diagonalLength = min(abs(deltaX), abs(deltaY))
     leader = [start]
-    if diagonalLength > EPSILON:
-        elbow = (
-            start[0] + (-diagonalLength if deltaX < 0.0
-                        else diagonalLength),
-            start[1] + (-diagonalLength if deltaY < 0.0
-                        else diagonalLength))
+    horizontalDistance = abs(deltaX)
+    verticalDistance = abs(deltaY)
+    if horizontalDistance > verticalDistance:
+        axisLength = horizontalDistance - verticalDistance
+        elbow = (start[0] + (-axisLength if deltaX < 0.0
+                             else axisLength), start[1])
         leader.append(elbow)
-    if (len(leader) == 1
-            or abs(leader[-1][0] - target[0]) > EPSILON
-            or abs(leader[-1][1] - target[1]) > EPSILON):
+    elif horizontalDistance > 0.0:
+        elbow = (target[0],
+                 start[1] + (-horizontalDistance if deltaY < 0.0
+                             else horizontalDistance))
+        leader.append(elbow)
+    if len(leader) == 1 or leader[-1] != target:
         leader.append(target)
     return leader
 

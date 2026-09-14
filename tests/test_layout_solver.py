@@ -83,7 +83,27 @@ class LayoutSolverTests(unittest.TestCase):
         self.assertLess(solver.pairScoreCalls, 250)
 
     def test_top_leaders_are_octilinear_and_enter_bottom_center(self):
-        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+        from wotstat_spotting_points.layout_solver import (
+            CalloutLayoutSolver, _octilinearLeader)
+
+        routes = (
+            ((0.0, 0.0), (0.0, 0.0),
+             [(0.0, 0.0), (0.0, 0.0)]),
+            ((0.0, 0.0), (0.0, 10.0),
+             [(0.0, 0.0), (0.0, 10.0)]),
+            ((0.0, 0.0), (10.0, 0.0),
+             [(0.0, 0.0), (10.0, 0.0)]),
+            ((0.0, 0.0), (10.0, 10.0),
+             [(0.0, 0.0), (10.0, 10.0)]),
+            ((0.0, 0.0), (10.0, 4.0),
+             [(0.0, 0.0), (6.0, 0.0), (10.0, 4.0)]),
+            ((0.0, 0.0), (4.0, 10.0),
+             [(0.0, 0.0), (4.0, 4.0), (4.0, 10.0)]),
+            ((0.0, 0.0), (0.00005, 10.0),
+             [(0.0, 0.0), (0.00005, 0.00005),
+              (0.00005, 10.0)]))
+        for start, target, expected in routes:
+            self.assertEqual(_octilinearLeader(start, target), expected)
 
         projected = self._box(130.0, 80.0, 170.0, 120.0)
         solver = CalloutLayoutSolver()
@@ -100,6 +120,8 @@ class LayoutSolverTests(unittest.TestCase):
             self.assertEqual(candidate['leader'][-1],
                              (boxX + boxWidth * 0.5,
                               boxY + boxHeight))
+            for point in candidate['leader'][:-1]:
+                self.assertNotEqual(point[1], boxY + boxHeight)
             for start, end in zip(candidate['leader'],
                                   candidate['leader'][1:]):
                 deltaX = abs(end[0] - start[0])
