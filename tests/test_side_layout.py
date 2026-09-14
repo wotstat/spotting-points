@@ -1,4 +1,5 @@
 import os
+import json
 import sys
 import unittest
 
@@ -20,6 +21,22 @@ def item(pointId, x, y):
 
 
 class SideLayoutTests(unittest.TestCase):
+    def test_short_front_projection_is_not_displaced_by_long_gun_callouts(self):
+        path = os.path.join(os.path.dirname(__file__), 'fixtures',
+                            'callouts_side_view.json')
+        with open(path) as stream:
+            args = json.load(stream)
+        result = SideLayoutSolver().solve(*args)
+        placements = dict((p['id'], p) for p in result['placements'])
+        front = placements['front']
+        self.assertTrue(all(abs(p[1] - front['leader'][0][1]) < 0.01
+                            for p in front['leader']))
+        for i, a in enumerate(result['placements']):
+            for b in result['placements'][i + 1:]:
+                self.assertEqual(rectangleIntersectionArea(a['rect'], b['rect']), 0)
+                self.assertFalse(_polylinesIntersect(a['leader'], b['leader']),
+                                 (a['id'], b['id']))
+
     def solve(self, items):
         return SideLayoutSolver().solve(
             1400, 900, box(300, 250, 900, 550), box(500, 220, 700, 420),
@@ -61,10 +78,13 @@ class SideLayoutTests(unittest.TestCase):
                  item('c', 711, 380), item('short', 877, 354),
                  item('d', 813, 387)]
         placements = dict((p['id'], p) for p in self.solve(items)['placements'])
-        ordered = [placements[p['id']] for p in sorted(items, key=lambda p: p['y'])]
-        for above, below in zip(ordered, ordered[1:]):
-            self.assertLessEqual(above['rect'][1] + above['rect'][3] + 6,
-                                 below['rect'][1])
+        for lane in ('left', 'right'):
+            ordered = [placements[p['id']]
+                       for p in sorted(items, key=lambda p: p['y'])
+                       if placements[p['id']]['lane'] == lane]
+            for above, below in zip(ordered, ordered[1:]):
+                self.assertLessEqual(above['rect'][1] + above['rect'][3] + 6,
+                                     below['rect'][1])
         self.assertTrue(all(p[1] == 354 for p in placements['short']['leader']))
 
     def test_depth_does_not_override_screen_order(self):

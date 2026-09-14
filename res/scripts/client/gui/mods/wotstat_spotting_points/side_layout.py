@@ -1,5 +1,6 @@
 from .layout_solver import (CALLOUT_GAP, EPSILON, SCREEN_MARGIN,
                             CalloutLayoutSolver, _clamp, _octilinearLeader,
+                            rectangleIntersectionArea, _polylinesIntersect,
                             _polylineLength)
 
 
@@ -7,7 +8,7 @@ LABEL_GAP = 6.0
 
 
 class SideLayoutSolver(CalloutLayoutSolver):
-    """Pack screen-ordered rows around the shortest leader on each side."""
+    """Place short horizontal leaders first; move only colliding labels."""
 
     def solve(self, width, height, hullPoints, turretPoints, items):
         items = sorted(items, key=lambda item: str(item['id']))
@@ -53,37 +54,27 @@ class SideLayoutSolver(CalloutLayoutSolver):
                             str(item['id']), item, baseline))
 
         placed = []
-        for lane in ('left', 'right'):
-            ordered = sorted((entry for entry in pending if entry[3]['lane'] == lane),
-                             key=lambda entry: (float(entry[2]['y']), entry[1]))
-            if not ordered:
-                continue
-            pivot = min(xrange(len(ordered)),
-                        key=lambda index: (ordered[index][0], ordered[index][1]))
-            anchor = ordered[pivot][3]
-            anchor['id'] = ordered[pivot][1]
-            placed.append(anchor)
-            # Reserve rows outwards from the shortest horizontal leader.
-            # An insertion in a crowded group pushes its neighbours as well,
-            # so a label cannot jump across another point's screen order.
-            for indices, direction in ((xrange(pivot - 1, -1, -1), -1),
-                                       (xrange(pivot + 1, len(ordered)), 1)):
-                neighbour = anchor
-                for index in indices:
-                    unusedLength, pointId, item, baseline = ordered[index]
-                    halfHeight = float(item['height']) * 0.5
-                    rect = neighbour['rect']
-                    if direction < 0:
-                        row = min(float(item['y']), rect[1] - LABEL_GAP - halfHeight)
-                    else:
-                        row = max(float(item['y']),
-                                  rect[1] + rect[3] + LABEL_GAP + halfHeight)
-                    baselineY = baseline['rect'][1] + halfHeight
-                    chosen = baseline if abs(row - baselineY) < EPSILON else (
-                        candidate(item, lane, row) or baseline)
-                    chosen['id'] = pointId
-                    placed.append(chosen)
-                    neighbour = chosen
+        for unusedLength, pointId, item, baseline in sorted(pending):
+            chosen = baseline
+            if (self._overlap(baseline, placed) > EPSILON
+                    or any(_polylinesIntersect(baseline['leader'], entry['leader'])
+                           for entry in placed)):
+                halfHeight = float(item['height']) * 0.5
+                rows = set((float(item['y']),))
+                for existing in placed:
+                    rect = existing['rect']
+                    rows.add(rect[1] - LABEL_GAP - halfHeight)
+                    rows.add(rect[1] + rect[3] + LABEL_GAP + halfHeight)
+                options = [baseline]
+                for lane in ('left', 'right'):
+                    for row in sorted(rows):
+                        option = candidate(item, lane, row)
+                        if option is not None:
+                            options.append(option)
+                chosen = min(options, key=lambda option: self._rank(
+                    option, item, placed, baseline['lane']))
+            chosen['id'] = pointId
+            placed.append(chosen)
 
         self._revision += 1
         self._signature = signature
@@ -92,3 +83,30 @@ class SideLayoutSolver(CalloutLayoutSolver):
         self._lastResult = self._serializeResult(
             geometry, {'entries': placed, 'score': ()})
         return self._lastResult
+
+    def _overlap(self, candidate, placed):
+        x, y, width, height = candidate['rect']
+        padded = (x, y - LABEL_GAP, width, height + LABEL_GAP * 2)
+        area = sum(rectangleIntersectionArea(padded, entry['rect'])
+                   for entry in placed)
+        return 0.0 if area < EPSILON else area
+
+    def _rank(self, candidate, item, placed, preferredLane):
+        centerY = candidate['rect'][1] + candidate['rect'][3] * 0.5
+        displacement = abs(centerY - float(item['y']))
+        crossings = 0
+        inversions = 0
+        for existing in placed:
+            crossings += int(_polylinesIntersect(
+                candidate['leader'], existing['leader']))
+            if existing['lane'] == candidate['lane']:
+                otherCenter = existing['rect'][1] + existing['rect'][3] * 0.5
+                pointDelta = float(item['y']) - existing['leader'][0][1]
+                inversions += int(pointDelta * (centerY - otherCenter)
+                                  < -EPSILON)
+        rowHeight = float(item['height']) + LABEL_GAP
+        length = _polylineLength(candidate['leader'])
+        cost = length + displacement * 4.0 + rowHeight * 2.0 * (
+            candidate['lane'] != preferredLane)
+        return (self._overlap(candidate, placed), inversions, crossings,
+                cost, displacement, centerY, candidate['lane'])
