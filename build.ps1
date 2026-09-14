@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.3.7',
+    [string]$Version = '0.3.8',
     [string]$Python = 'C:\Python27\python.exe',
     [string]$Royale = "$env:LOCALAPPDATA\Programs\ApacheRoyale\0.9.12\royale-asjs",
     [string]$JavaHome = ''

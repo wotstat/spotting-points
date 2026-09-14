@@ -1,3 +1,5 @@
+import time
+
 from .layout_solver import (CALLOUT_GAP, EPSILON, SCREEN_MARGIN,
                             CalloutLayoutSolver, _clamp, _octilinearLeader,
                             rectangleIntersectionArea, _polylinesIntersect,
@@ -7,16 +9,31 @@ from .layout_solver import (CALLOUT_GAP, EPSILON, SCREEN_MARGIN,
 LABEL_GAP = 6.0
 LAYOUT_SWITCH_MARGIN = 48.0
 ORDER_DEADBAND = 4.0
+HYSTERESIS_SECONDS = 0.8
+HYSTERESIS_RECHECK_SECONDS = 0.05
 
 
 class SideLayoutSolver(CalloutLayoutSolver):
     """Place short horizontal leaders first; move only colliding labels."""
 
+    def __init__(self, clock=None):
+        super(SideLayoutSolver, self).__init__()
+        self._clock = clock or time.clock
+        self._holdStarted = None
+        self._recheckAt = None
+
+    def reset(self):
+        super(SideLayoutSolver, self).reset()
+        self._holdStarted = None
+        self._recheckAt = None
+
     def solve(self, width, height, hullPoints, turretPoints, items):
+        now = self._clock()
         items = sorted(items, key=lambda item: str(item['id']))
         signature = self._inputSignature(
             width, height, hullPoints, turretPoints, items)
-        if signature == self._signature:
+        if (signature == self._signature
+                and (self._recheckAt is None or now < self._recheckAt)):
             self.lastChanged = False
             return {'revision': self._revision}
 
@@ -80,12 +97,14 @@ class SideLayoutSolver(CalloutLayoutSolver):
 
         # Keep the previous choices in current geometry, not frozen pixels.
         # The six-pixel label gap provides room for small relative movements.
+        holding = False
         if self._lastResult is not None:
             previous = self._lastResult['placements']
             freshById = dict((entry['id'], entry) for entry in placed)
             itemById = dict((str(item['id']), item) for item in items)
             if set(itemById) == set(entry['id'] for entry in previous):
                 retained = []
+                hasHeldChoice = False
                 for entry in previous:
                     item = itemById[entry['id']]
                     offset = (entry['rect'][1] + entry['rect'][3] * 0.5
@@ -101,15 +120,32 @@ class SideLayoutSolver(CalloutLayoutSolver):
                             and abs(fresh['rect'][1] - choice['rect'][1])
                             < float(item['height']) * 0.5):
                         choice = fresh
+                    else:
+                        hasHeldChoice = True
                     choice['id'] = entry['id']
                     retained.append(choice)
                 if len(retained) == len(previous):
                     oldScore = self._stabilityScore(retained)
                     newScore = self._stabilityScore(placed)
-                    if (all(a <= b for a, b in zip(oldScore[:3], newScore[:3]))
-                            and oldScore[3] <= newScore[3] + LAYOUT_SWITCH_MARGIN):
+                    started = now if self._holdStarted is None else self._holdStarted
+                    strength = max(0.0, 1.0 - (now - started) / HYSTERESIS_SECONDS)
+                    if (strength > 0.0
+                            and all(a <= b for a, b in zip(oldScore[:3], newScore[:3]))
+                            and oldScore[3] <= newScore[3] + LAYOUT_SWITCH_MARGIN * strength):
                         placed = retained
                         self.stablePlanHits += 1
+                        holding = hasHeldChoice
+                        if holding:
+                            self._holdStarted = started
+
+        # Revisit a pending choice even if the camera input is cached.
+        # Continuous motion does not restart this countdown.
+        if holding:
+            self._recheckAt = min(now + HYSTERESIS_RECHECK_SECONDS,
+                                  self._holdStarted + HYSTERESIS_SECONDS)
+        else:
+            self._holdStarted = None
+            self._recheckAt = None
 
         self._revision += 1
         self._signature = signature

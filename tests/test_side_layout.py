@@ -21,6 +21,35 @@ def item(pointId, x, y):
 
 
 class SideLayoutTests(unittest.TestCase):
+    def test_hysteresis_expires_even_with_identical_cached_camera_input(self):
+        now = [0.0]
+        solver = SideLayoutSolver(clock=lambda: now[0])
+        def frame(x):
+            return solver.solve(1400, 900, box(300, 250, 900, 550),
+                                box(500, 220, 700, 420), [item('a', x, 380)])
+        frame(599)
+        now[0] = 0.1
+        self.assertEqual(frame(601)['placements'][0]['lane'], 'left')
+        now[0] = 0.11
+        self.assertNotIn('placements', frame(601))
+        now[0] = 1.0
+        self.assertEqual(frame(601)['placements'][0]['lane'], 'right')
+        self.assertNotIn('placements', frame(601))
+
+    def test_motion_does_not_restart_hysteresis_timeout(self):
+        now = [0.0]
+        solver = SideLayoutSolver(clock=lambda: now[0])
+        def frame(x):
+            return solver.solve(1400, 900, box(300, 250, 900, 550),
+                                box(500, 220, 700, 420), [item('a', x, 380)])
+        frame(599)
+        now[0] = 0.1
+        self.assertEqual(frame(601)['placements'][0]['lane'], 'left')
+        now[0] = 0.4
+        self.assertEqual(frame(602)['placements'][0]['lane'], 'left')
+        now[0] = 1.0
+        self.assertEqual(frame(603)['placements'][0]['lane'], 'right')
+
     def test_continuous_row_motion_follows_its_neighbour_immediately(self):
         solver = SideLayoutSolver()
         for shortY in (380, 381, 383, 382, 380):
