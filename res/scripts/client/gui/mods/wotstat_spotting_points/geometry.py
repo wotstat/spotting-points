@@ -76,7 +76,8 @@ def bboxPoints(low, high):
 
 
 def buildLayoutBounds(hullBounds, turretBounds):
-    return LayoutBounds(bboxPoints(*hullBounds), bboxPoints(*turretBounds))
+    return LayoutBounds(bboxPoints(hullBounds[0], hullBounds[1]),
+                        bboxPoints(turretBounds[0], turretBounds[1]))
 
 
 def add(a, b):
