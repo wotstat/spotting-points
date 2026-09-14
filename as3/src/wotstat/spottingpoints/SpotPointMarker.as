@@ -96,6 +96,10 @@ package wotstat.spottingpoints {
             return callout.width;
         }
 
+        public function get calloutHeight():Number {
+            return CALLOUT_HEIGHT;
+        }
+
         public function hitTestUi(parentX:Number, parentY:Number):Boolean {
             var parentPoint:Point = new Point(parentX, parentY);
             var localPoint:Point = globalToLocal(
@@ -109,19 +113,46 @@ package wotstat.spottingpoints {
                 localX, localY);
         }
 
-        public function layoutCallout(edgeX:Number, centerY:Number,
-                                      placeLeft:Boolean):void {
-            var parentPoint:Point = new Point(edgeX, centerY);
-            var localPoint:Point = globalToLocal(
-                parent.localToGlobal(parentPoint));
-            var localX:Number = localPoint.x;
-            var localY:Number = localPoint.y;
-            callout.x = placeLeft ? localX - callout.width : localX;
-            callout.y = localY - CALLOUT_HEIGHT * 0.5;
+        public function layoutCallout(boxX:Number, boxY:Number,
+                                      placement:String):void {
+            var localBox:Point = globalToLocal(
+                parent.localToGlobal(new Point(boxX, boxY)));
+            callout.x = localBox.x;
+            callout.y = localBox.y;
+
+            var markerPosition:Point = parent.globalToLocal(
+                localToGlobal(new Point(0, 0)));
+            var targetX:Number;
+            var targetY:Number;
+            if (placement == "left") {
+                targetX = boxX + callout.width;
+                targetY = boxY + CALLOUT_HEIGHT * 0.5;
+            } else if (placement == "right") {
+                targetX = boxX;
+                targetY = boxY + CALLOUT_HEIGHT * 0.5;
+            } else {
+                targetX = Math.max(
+                    boxX, Math.min(boxX + callout.width,
+                                   markerPosition.x));
+                targetY = boxY + CALLOUT_HEIGHT;
+            }
+            var localTarget:Point = globalToLocal(
+                parent.localToGlobal(new Point(targetX, targetY)));
             connector.graphics.clear();
             connector.graphics.lineStyle(1, 0xE6DFAE, 0.78);
             connector.graphics.moveTo(0, 0);
-            connector.graphics.lineTo(localX, localY);
+            if (placement == "left" || placement == "right") {
+                var verticalDelta:Number = localTarget.y;
+                var horizontalDelta:Number = localTarget.x;
+                var diagonalRun:Number = Math.min(
+                    Math.abs(verticalDelta), Math.abs(horizontalDelta));
+                var diagonalX:Number = horizontalDelta < 0 ?
+                    -diagonalRun : diagonalRun;
+                var diagonalY:Number = verticalDelta < 0 ?
+                    -diagonalRun : diagonalRun;
+                connector.graphics.lineTo(diagonalX, diagonalY);
+            }
+            connector.graphics.lineTo(localTarget.x, localTarget.y);
         }
 
         public function dispose():void {
