@@ -134,7 +134,7 @@ package wotstat.spottingpoints {
             if (leader == null || leader.length < 2) {
                 return;
             }
-            connector.graphics.lineStyle(1, 0xE6DFAE, 0.78);
+            connector.graphics.lineStyle(1, 0xE6DFAE, 1);
             var first:Array = leader[0] as Array;
             var localPoint:Point = overlayToLocal(first);
             connector.graphics.moveTo(localPoint.x, localPoint.y);
