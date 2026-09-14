@@ -34,7 +34,7 @@
 Cover convex inflation/intersection area and assert that one item receives symmetric upward/downward side candidates plus five top candidates. Run:
 
 ```powershell
-C:/Python27/python.exe -B -m unittest tests.test_layout_solver.LayoutSolverTests.test_geometry_and_candidates_are_symmetric
+C:/Python27/python.exe -B tests/test_layout_solver.py LayoutSolverTests.test_geometry_and_candidates_are_symmetric
 ```
 
 - [x] **Step 2: Implement the minimal pure geometry and candidate model**
@@ -53,7 +53,7 @@ Use no more than four additional test methods to jointly cover:
 Run the module and confirm the new assertions fail before implementing search:
 
 ```powershell
-C:/Python27/python.exe -B -m unittest tests.test_layout_solver
+C:/Python27/python.exe -B tests/test_layout_solver.py
 ```
 
 - [x] **Step 4: Implement local scoring and bounded search**
@@ -65,7 +65,7 @@ On a changed valid signature, update all remembered lanes and discrete candidate
 - [x] **Step 5: Run the focused solver tests and commit the slice**
 
 ```powershell
-C:/Python27/python.exe -B -m unittest tests.test_layout_solver
+C:/Python27/python.exe -B tests/test_layout_solver.py
 git add -- tests/test_layout_solver.py res/scripts/client/gui/mods/wotstat_spotting_points/layout_solver.py
 git commit -m "feat: add Python callout layout solver"
 ```
@@ -86,7 +86,7 @@ git commit -m "feat: add Python callout layout solver"
 Extend the existing `PyGFxValue`-like fixture so the same test checks attribute/index payload conversion, a full first result, a revision-only cache hit, performance counters, and reset from `clearMarkers()`.
 
 ```powershell
-C:/Python27/python.exe -B -m unittest tests.test_marker_view.MarkerViewTests.test_layout_bridge_cache_stats_and_reset
+C:/Python27/python.exe -B tests/test_marker_view.py MarkerViewTests.test_layout_bridge_cache_stats_and_reset
 ```
 
 - [x] **Step 2: Implement bridge conversion and timing**
@@ -102,7 +102,7 @@ Log an unexpected solver exception once, mark the view solver failed, return a s
 - [x] **Step 4: Run marker-view and solver tests and commit**
 
 ```powershell
-C:/Python27/python.exe -B -m unittest tests.test_layout_solver tests.test_marker_view tests.test_controller
+C:/Python27/python.exe -B -m unittest discover -s tests
 git add -- tests/test_marker_view.py res/scripts/client/gui/mods/wotstat_spotting_points/marker_view.py
 git commit -m "feat: bridge callout layout through DAAPI"
 ```

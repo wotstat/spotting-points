@@ -186,8 +186,8 @@ and areas are equal.
 
 When a candidate is added to a partial plan, pairwise scoring adds:
 
-1. one leader crossing when the two polylines intersect away from their own
-   endpoints;
+1. one leader crossing when the two polylines intersect, including contact at
+   their endpoints;
 2. one label-overlap pair and its exact intersection area when the two callout
    rectangles overlap;
 3. one point violation and its penetration when either leader comes within ten
@@ -235,7 +235,9 @@ On changed input, the solver first rebuilds only those remembered candidates.
 If a higher-priority conflict count increases, it builds the complete candidate
 set only for the labels participating in that conflict and repairs them
 atomically. Without a new conflict, a label is reconsidered only after its
-current leader cost has grown by more than 64 pixels since its last evaluation.
+switch-neutral weighted leader length has grown by more than 64 pixels since
+its last evaluation. The stored baseline never includes the lane-switch
+penalty.
 A full all-label pass is reserved for initial layout, membership changes, and
 the rare case where targeted repair cannot preserve the previous conflict
 counts. There is no wall-clock callback: if motion stops, no later

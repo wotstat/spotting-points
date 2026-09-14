@@ -178,6 +178,41 @@ class LayoutSolverTests(unittest.TestCase):
         self.assertEqual(solver.stablePlanHits, 1)
         self.assertLessEqual(solver.candidateCount, 32)
 
+    def test_lane_switch_does_not_raise_reconsideration_baseline(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        class SwitchingSolver(CalloutLayoutSolver):
+            def _search(self, items, geometry, width, height):
+                item = items[0]
+                entry = {
+                    'id': str(item['id']),
+                    'lane': 'right',
+                    'offsetIndex': 0,
+                    'rect': (8.0, 8.0, 64.0, 24.0),
+                    'leader': [(0.0, 0.0), (20.0, 0.0)],
+                    'point': (float(item['x']), float(item['y']))
+                }
+                entry['_localScore'] = self._candidateScore(
+                    item, entry, geometry, width, height)
+                entry['_signature'] = self._candidateSignature(entry)
+                return {'score': entry['_localScore'],
+                        'signature': entry['_signature'],
+                        'entries': [entry]}
+
+        solver = SwitchingSolver()
+        solver._lastLaneByPointId['front'] = 'left'
+        hull = self._box(120.0, 90.0, 280.0, 210.0)
+        turret = self._box(160.0, 60.0, 240.0, 140.0)
+        solver.solve(
+            400.0, 300.0, hull, turret,
+            [self._item('front', 200.0, 180.0)])
+
+        baseline = solver._lastEvaluatedCostByPointId['front']
+        grown = {'lane': 'right',
+                 'leader': [(0.0, 0.0), (85.0, 0.0)]}
+        self.assertEqual(baseline, 20.0)
+        self.assertGreater(solver._leaderCost(grown), baseline + 64.0)
+
 
 if __name__ == '__main__':
     unittest.main()

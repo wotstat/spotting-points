@@ -389,7 +389,7 @@ class CalloutLayoutSolver(object):
                 entry['lane'], entry['offsetIndex'])
             if entry['id'] in evaluatedIds:
                 self._lastEvaluatedCostByPointId[entry['id']] = (
-                    entry['_localScore'][9])
+                    self._leaderCost(entry))
         result = self._serializeResult(geometry, plan)
         self._lastResult = result
         return result
@@ -460,9 +460,9 @@ class CalloutLayoutSolver(object):
         if not reconsiderIds:
             reconsiderIds.update(
                 entry['id'] for entry in entries
-                if entry['_localScore'][9]
+                if self._leaderCost(entry)
                 > self._lastEvaluatedCostByPointId.get(
-                    entry['id'], entry['_localScore'][9])
+                    entry['id'], self._leaderCost(entry))
                 + RECONSIDER_DISTANCE_DELTA)
         if reconsiderIds:
             candidateSets = {}
@@ -668,12 +668,16 @@ class CalloutLayoutSolver(object):
                 self._ordinaryCost(item, candidate))
 
     def _ordinaryCost(self, item, candidate):
-        length = _polylineLength(candidate['leader'])
-        if candidate['lane'] == 'top':
-            length *= TOP_LEADER_WEIGHT
+        length = self._leaderCost(candidate)
         remembered = self._lastLaneByPointId.get(str(item['id']))
         if remembered is not None and remembered != candidate['lane']:
             length += LANE_SWITCH_PENALTY
+        return length
+
+    def _leaderCost(self, candidate):
+        length = _polylineLength(candidate['leader'])
+        if candidate['lane'] == 'top':
+            length *= TOP_LEADER_WEIGHT
         return length
 
     def _pairScore(self, first, second):
