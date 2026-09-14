@@ -1,7 +1,5 @@
 package wotstat.spottingpoints {
     import flash.display.Sprite;
-    import flash.geom.Point;
-    import flash.geom.Rectangle;
 
     public class LayoutDebugOverlay extends Sprite {
         private static const HULL_COLOR:uint = 0xFF9B3D;
@@ -21,18 +19,17 @@ package wotstat.spottingpoints {
             mouseChildren = false;
         }
 
-        public function render(hullPart:Object, turretPart:Object,
-                               placements:Array):void {
+        public function render(result:Object):void {
             graphics.clear();
-            if (!visible || hullPart == null || turretPart == null) {
+            if (!visible || result == null || result.hull == null ||
+                    result.turret == null) {
                 return;
             }
-
-            drawBlockedPolygon(hullPart.obstacle as Array);
-            drawBlockedPolygon(turretPart.obstacle as Array);
-            drawProjectedBox(hullPart, HULL_COLOR);
-            drawProjectedBox(turretPart, TURRET_COLOR);
-            drawSelectedPlacements(placements);
+            drawBlockedPolygon(result.hull.obstacle as Array);
+            drawBlockedPolygon(result.turret.obstacle as Array);
+            drawProjectedBox(result.hull.points as Array, HULL_COLOR);
+            drawProjectedBox(result.turret.points as Array, TURRET_COLOR);
+            drawSelectedPlacements(result.placements as Array);
         }
 
         public function clear():void {
@@ -45,32 +42,28 @@ package wotstat.spottingpoints {
             }
             graphics.lineStyle(2, BLOCKED_COLOR, 0.82);
             graphics.beginFill(BLOCKED_COLOR, 0.055);
-            var first:Point = points[0] as Point;
-            graphics.moveTo(first.x, first.y);
+            graphics.moveTo(pointX(points[0]), pointY(points[0]));
             for (var index:int = 1; index < points.length; index++) {
-                var point:Point = points[index] as Point;
-                graphics.lineTo(point.x, point.y);
+                graphics.lineTo(pointX(points[index]), pointY(points[index]));
             }
-            graphics.lineTo(first.x, first.y);
+            graphics.lineTo(pointX(points[0]), pointY(points[0]));
             graphics.endFill();
         }
 
-        private function drawProjectedBox(part:Object, color:uint):void {
-            if (part == null || part.points == null ||
-                    part.points.length != 8) {
+        private function drawProjectedBox(points:Array, color:uint):void {
+            if (points == null || points.length != 8) {
                 return;
             }
-            var points:Array = part.points as Array;
             graphics.lineStyle(1.5, color, 0.92);
             for each (var edge:Array in BOX_EDGES) {
-                var start:Point = points[int(edge[0])] as Point;
-                var end:Point = points[int(edge[1])] as Point;
-                graphics.moveTo(start.x, start.y);
-                graphics.lineTo(end.x, end.y);
+                var start:Object = points[int(edge[0])];
+                var end:Object = points[int(edge[1])];
+                graphics.moveTo(pointX(start), pointY(start));
+                graphics.lineTo(pointX(end), pointY(end));
             }
-            for each (var point:Point in points) {
+            for each (var point:Object in points) {
                 graphics.beginFill(color, 0.96);
-                graphics.drawCircle(point.x, point.y, 2.5);
+                graphics.drawCircle(pointX(point), pointY(point), 2.5);
                 graphics.endFill();
             }
         }
@@ -80,16 +73,31 @@ package wotstat.spottingpoints {
                 return;
             }
             graphics.lineStyle(2, SELECTED_COLOR, 0.9);
-            for each (var entry:Object in placements) {
-                var placement:Object = entry.placement;
-                var rect:Rectangle = placement != null ?
-                    placement.rect as Rectangle : null;
-                if (rect == null) {
+            for each (var placement:Object in placements) {
+                var rect:Array = placement.rect as Array;
+                if (rect != null && rect.length == 4) {
+                    graphics.drawRoundRect(
+                        Number(rect[0]), Number(rect[1]),
+                        Number(rect[2]), Number(rect[3]), 5, 5);
+                }
+                var leader:Array = placement.leader as Array;
+                if (leader == null || leader.length < 2) {
                     continue;
                 }
-                graphics.drawRoundRect(
-                    rect.x, rect.y, rect.width, rect.height, 5, 5);
+                graphics.moveTo(pointX(leader[0]), pointY(leader[0]));
+                for (var index:int = 1; index < leader.length; index++) {
+                    graphics.lineTo(
+                        pointX(leader[index]), pointY(leader[index]));
+                }
             }
+        }
+
+        private function pointX(value:Object):Number {
+            return Number(value[0]);
+        }
+
+        private function pointY(value:Object):Number {
+            return Number(value[1]);
         }
     }
 }

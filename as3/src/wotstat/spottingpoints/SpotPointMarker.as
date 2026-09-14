@@ -114,45 +114,29 @@ package wotstat.spottingpoints {
         }
 
         public function layoutCallout(boxX:Number, boxY:Number,
-                                      placement:String):void {
+                                      leader:Array):void {
             var localBox:Point = globalToLocal(
                 parent.localToGlobal(new Point(boxX, boxY)));
             callout.x = localBox.x;
             callout.y = localBox.y;
 
-            var markerPosition:Point = parent.globalToLocal(
-                localToGlobal(new Point(0, 0)));
-            var targetX:Number;
-            var targetY:Number;
-            if (placement == "left") {
-                targetX = boxX + callout.width;
-                targetY = boxY + CALLOUT_HEIGHT * 0.5;
-            } else if (placement == "right") {
-                targetX = boxX;
-                targetY = boxY + CALLOUT_HEIGHT * 0.5;
-            } else {
-                targetX = Math.max(
-                    boxX, Math.min(boxX + callout.width,
-                                   markerPosition.x));
-                targetY = boxY + CALLOUT_HEIGHT;
-            }
-            var localTarget:Point = globalToLocal(
-                parent.localToGlobal(new Point(targetX, targetY)));
             connector.graphics.clear();
-            connector.graphics.lineStyle(1, 0xE6DFAE, 0.78);
-            connector.graphics.moveTo(0, 0);
-            if (placement == "left" || placement == "right") {
-                var verticalDelta:Number = localTarget.y;
-                var horizontalDelta:Number = localTarget.x;
-                var diagonalRun:Number = Math.min(
-                    Math.abs(verticalDelta), Math.abs(horizontalDelta));
-                var diagonalX:Number = horizontalDelta < 0 ?
-                    -diagonalRun : diagonalRun;
-                var diagonalY:Number = verticalDelta < 0 ?
-                    -diagonalRun : diagonalRun;
-                connector.graphics.lineTo(diagonalX, diagonalY);
+            if (leader == null || leader.length < 2) {
+                return;
             }
-            connector.graphics.lineTo(localTarget.x, localTarget.y);
+            connector.graphics.lineStyle(1, 0xE6DFAE, 0.78);
+            var first:Array = leader[0] as Array;
+            var localPoint:Point = overlayToLocal(first);
+            connector.graphics.moveTo(localPoint.x, localPoint.y);
+            for (var index:int = 1; index < leader.length; index++) {
+                localPoint = overlayToLocal(leader[index] as Array);
+                connector.graphics.lineTo(localPoint.x, localPoint.y);
+            }
+        }
+
+        private function overlayToLocal(value:Array):Point {
+            return globalToLocal(parent.localToGlobal(new Point(
+                Number(value[0]), Number(value[1]))));
         }
 
         public function dispose():void {
