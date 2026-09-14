@@ -82,6 +82,7 @@ class SideLayoutSolver(CalloutLayoutSolver):
         # The six-pixel label gap provides room for small relative movements.
         if self._lastResult is not None:
             previous = self._lastResult['placements']
+            freshById = dict((entry['id'], entry) for entry in placed)
             itemById = dict((str(item['id']), item) for item in items)
             if set(itemById) == set(entry['id'] for entry in previous):
                 retained = []
@@ -92,6 +93,14 @@ class SideLayoutSolver(CalloutLayoutSolver):
                     choice = candidate(item, entry['lane'], float(item['y']) + offset)
                     if choice is None:
                         break
+                    fresh = freshById[entry['id']]
+                    # Sub-row motion on the same side is continuous: use the
+                    # newly solved position, even while other labels are held.
+                    # A full row jump or a side change still needs hysteresis.
+                    if (fresh['lane'] == choice['lane']
+                            and abs(fresh['rect'][1] - choice['rect'][1])
+                            < float(item['height']) * 0.5):
+                        choice = fresh
                     choice['id'] = entry['id']
                     retained.append(choice)
                 if len(retained) == len(previous):

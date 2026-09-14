@@ -21,6 +21,16 @@ def item(pointId, x, y):
 
 
 class SideLayoutTests(unittest.TestCase):
+    def test_continuous_row_motion_follows_its_neighbour_immediately(self):
+        solver = SideLayoutSolver()
+        for shortY in (380, 381, 383, 382, 380):
+            result = solver.solve(1400, 900, box(300, 250, 900, 550),
+                                  box(500, 220, 700, 420),
+                                  [item('short', 890, shortY), item('long', 760, 386)])
+            placements = dict((p['id'], p) for p in result['placements'])
+            self.assertAlmostEqual(placements['long']['rect'][1],
+                                   placements['short']['rect'][1] + 30.0)
+
     def test_row_holds_through_small_y_changes_but_releases_a_collision(self):
         solver = SideLayoutSolver()
         def frame(y):
