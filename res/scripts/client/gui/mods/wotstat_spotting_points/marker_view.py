@@ -1,3 +1,9 @@
+import logging
+import math
+import time
+from collections import deque
+
+import BigWorld
 import GUI
 from Math import Matrix, MatrixProduct
 from realm import CURRENT_REALM
@@ -12,9 +18,12 @@ from skeletons.gui.impl import IGuiLoader
 from vehicle_systems.tankStructure import TankNodeNames, TankPartNames
 
 from .marker_logic import buildOverlayData, isOverlaySceneActive
+from .layout_solver import CalloutLayoutSolver
 
 VIEW_ALIAS = 'wotstatSpottingPointsMarkerOverlay'
 VIEW_SWF = 'wotstatSpottingPointsMarkers.swf'
+
+log = logging.getLogger('WOTSTAT_SPOTTING_POINTS')
 
 _controller = None
 _view = None
@@ -136,6 +145,61 @@ class MarkerOverlayView(View):
         self._sceneActive = False
         self._nativeMarkers = {}
         self._layoutMarkers = {}
+        self._initializeLayoutSolver()
+
+    def _initializeLayoutSolver(self):
+        self._layoutSolver = CalloutLayoutSolver()
+        self._layoutSolverFailed = False
+        self._layoutCachedSamples = deque(maxlen=240)
+        self._layoutChangedSamples = deque(maxlen=240)
+        self._layoutCacheHits = 0
+        self._layoutCacheMisses = 0
+
+    def solveLayout(self, payload):
+        if self._layoutSolverFailed:
+            return {'revision': self._layoutSolver.revision,
+                    'disabled': True}
+        callbackStarted = time.clock()
+        try:
+            width, height, hull, turret, items = _convertLayoutPayload(
+                payload)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return {'revision': self._layoutSolver.revision}
+        try:
+            solveStarted = time.clock()
+            result = self._layoutSolver.solve(
+                width, height, hull, turret, items)
+            solveMilliseconds = (time.clock() - solveStarted) * 1000.0
+            if self._layoutSolver.lastChanged:
+                self._layoutCacheMisses += 1
+                self._layoutChangedSamples.append(solveMilliseconds)
+            else:
+                self._layoutCacheHits += 1
+                self._layoutCachedSamples.append(
+                    (time.clock() - callbackStarted) * 1000.0)
+            return result
+        except Exception:
+            self._layoutSolverFailed = True
+            log.exception('Callout layout solver stopped after error')
+            controller = self._controller
+            if controller is not None:
+                BigWorld.callback(
+                    0.0, lambda: self._disableUiPointsAfterFailure(controller))
+            return {'revision': self._layoutSolver.revision,
+                    'disabled': True}
+
+    def _disableUiPointsAfterFailure(self, controller):
+        if self._controller is controller:
+            controller.setOption('showUiPoints', False)
+
+    def getLayoutPerformanceStats(self):
+        return {
+            'cacheHits': self._layoutCacheHits,
+            'cacheMisses': self._layoutCacheMisses,
+            'candidateCount': self._layoutSolver.candidateCount,
+            'cachedCallbacks': _sampleStats(self._layoutCachedSamples),
+            'changedSolves': _sampleStats(self._layoutChangedSamples)
+        }
 
     def _populate(self):
         global _view, _loading
@@ -232,6 +296,7 @@ class MarkerOverlayView(View):
     def clearMarkers(self):
         if not self._ready:
             return
+        self._layoutSolver.reset()
         for pointId in tuple(self._nativeMarkers):
             self._removeMarker(pointId)
         for anchorId in tuple(self._layoutMarkers):
@@ -258,9 +323,85 @@ class MarkerOverlayView(View):
         self._sceneActive = False
         self._nativeMarkers = None
         self._layoutMarkers = None
+        self._layoutSolver = None
         if _view is self:
             _view = None
         _loading = False
         if controller is not None:
             controller.detachMarkerView(self)
         super(MarkerOverlayView, self)._dispose()
+
+
+def _readField(value, name):
+    try:
+        return getattr(value, name)
+    except AttributeError:
+        return value[name]
+
+
+def _finiteNumber(value):
+    number = float(value)
+    if math.isnan(number) or math.isinf(number):
+        raise ValueError('Expected finite layout number')
+    return number
+
+
+def _convertPoints(values):
+    if len(values) != 8:
+        raise ValueError('Expected eight projected corners')
+    points = []
+    for index in xrange(8):
+        point = values[index]
+        if len(point) != 2:
+            raise ValueError('Expected projected point pair')
+        points.append((_finiteNumber(point[0]), _finiteNumber(point[1])))
+    return points
+
+
+def _convertLayoutPayload(payload):
+    width = _finiteNumber(_readField(payload, 'width'))
+    height = _finiteNumber(_readField(payload, 'height'))
+    if width <= 0.0 or height <= 0.0:
+        raise ValueError('Expected positive viewport')
+    hull = _convertPoints(_readField(payload, 'hull'))
+    turret = _convertPoints(_readField(payload, 'turret'))
+    values = _readField(payload, 'items')
+    items = []
+    seen = set()
+    for index in xrange(len(values)):
+        value = values[index]
+        pointId = str(_readField(value, 'id'))
+        part = str(_readField(value, 'part'))
+        if not pointId or pointId in seen or part not in ('hull', 'turret'):
+            raise ValueError('Invalid layout item identity')
+        widthValue = _finiteNumber(_readField(value, 'width'))
+        heightValue = _finiteNumber(_readField(value, 'height'))
+        if widthValue <= 0.0 or heightValue <= 0.0:
+            raise ValueError('Expected positive callout size')
+        seen.add(pointId)
+        items.append({
+            'id': pointId,
+            'x': _finiteNumber(_readField(value, 'x')),
+            'y': _finiteNumber(_readField(value, 'y')),
+            'width': widthValue,
+            'height': heightValue,
+            'part': part
+        })
+    items.sort(key=lambda item: item['id'])
+    return width, height, hull, turret, items
+
+
+def _sampleStats(samples):
+    values = sorted(samples)
+    count = len(values)
+    if count == 0:
+        return {'count': 0, 'medianMs': 0.0,
+                'p95Ms': 0.0, 'maxMs': 0.0}
+    middle = count // 2
+    if count % 2:
+        median = values[middle]
+    else:
+        median = (values[middle - 1] + values[middle]) * 0.5
+    percentileIndex = max(0, int(math.ceil(count * 0.95)) - 1)
+    return {'count': count, 'medianMs': median,
+            'p95Ms': values[percentileIndex], 'maxMs': values[-1]}

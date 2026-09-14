@@ -269,6 +269,10 @@ class CalloutLayoutSolver(object):
         self.lastChanged = False
         self.candidateCount = 0
 
+    @property
+    def revision(self):
+        return self._revision
+
     def reset(self):
         self._revision = 0
         self._signature = None

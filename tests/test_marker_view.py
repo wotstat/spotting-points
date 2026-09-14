@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import importlib
+import logging
 import math
 import os
 import sys
@@ -14,6 +15,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'res',
 class Bag(object):
     def __init__(self, **attributes):
         self.__dict__.update(attributes)
+
+
+class ProxyList(object):
+    def __init__(self, values):
+        self._values = values
+
+    def __len__(self):
+        return len(self._values)
+
+    def __getitem__(self, index):
+        return self._values[index]
 
 
 class FakeMatrix(object):
@@ -72,6 +84,7 @@ class FakeFlash(object):
         self.layoutCreated = []
         self.updated = []
         self.removed = []
+        self.cleared = 0
 
     def as_createMarker(self, pointId, label):
         marker = object()
@@ -89,6 +102,9 @@ class FakeFlash(object):
     def as_removeMarker(self, pointId):
         self.removed.append(pointId)
 
+    def as_clearMarkers(self):
+        self.cleared += 1
+
 
 def _module(name, **attributes):
     module = types.ModuleType(name)
@@ -100,12 +116,17 @@ def _module(name, **attributes):
 
 def _loadMarkerViewModule(currentRealm='RU'):
     nativeMarkers = []
+    callbacks = []
 
     def createNativeMarker():
         marker = FakeNativeMarker()
         nativeMarkers.append(marker)
         return marker
 
+    _module('BigWorld',
+            callback=lambda delay, function:
+            callbacks.append((delay, function)) or len(callbacks),
+            testCallbacks=callbacks)
     _module('GUI', HangarVehicleMarker=createNativeMarker)
     _module('Math', Matrix=FakeMatrix, MatrixProduct=FakeMatrixProduct)
     _module('realm', CURRENT_REALM=currentRealm)
@@ -141,6 +162,81 @@ def _loadMarkerViewModule(currentRealm='RU'):
 
 
 class MarkerViewTests(unittest.TestCase):
+    def test_layout_bridge_cache_stats_and_reset(self):
+        markerView, _ = _loadMarkerViewModule()
+        flash = FakeFlash()
+        view = object.__new__(markerView.MarkerOverlayView)
+        view._ready = True
+        view._controller = None
+        view._nativeMarkers = {}
+        view._layoutMarkers = {}
+        view.flashObject = flash
+        view._initializeLayoutSolver()
+
+        def box(left, top, right, bottom):
+            corners = [[left, top], [right, top], [right, bottom],
+                       [left, bottom]]
+            return ProxyList(corners + corners)
+
+        payload = Bag(
+            width=400.0, height=300.0,
+            hull=box(120.0, 90.0, 280.0, 210.0),
+            turret=box(160.0, 60.0, 240.0, 140.0),
+            items=ProxyList([Bag(
+                id='front', x=200.0, y=180.0,
+                width=64.0, height=24.0, part='hull')]))
+
+        first = view.solveLayout(payload)
+        cached = view.solveLayout(payload)
+        stats = view.getLayoutPerformanceStats()
+
+        self.assertEqual(first['revision'], 1)
+        self.assertEqual(cached, {'revision': 1})
+        self.assertEqual(stats['cacheHits'], 1)
+        self.assertEqual(stats['cacheMisses'], 1)
+        self.assertEqual(stats['cachedCallbacks']['count'], 1)
+        self.assertEqual(stats['changedSolves']['count'], 1)
+        self.assertGreater(stats['candidateCount'], 0)
+
+        view.clearMarkers()
+        afterReset = view.solveLayout(payload)
+        self.assertEqual(flash.cleared, 1)
+        self.assertEqual(afterReset['revision'], 1)
+        self.assertIn('placements', afterReset)
+
+    def test_unexpected_layout_failure_is_disabled_once(self):
+        markerView, _ = _loadMarkerViewModule()
+        markerView.log.addHandler(logging.NullHandler())
+
+        class BrokenSolver(object):
+            revision = 7
+            candidateCount = 0
+
+            def solve(self, *args):
+                raise RuntimeError('broken solver')
+
+        disabled = []
+        controller = Bag(setOption=lambda name, value:
+                         disabled.append((name, value)))
+        view = object.__new__(markerView.MarkerOverlayView)
+        view._controller = controller
+        view._initializeLayoutSolver()
+        view._layoutSolver = BrokenSolver()
+        corners = ProxyList([[0.0, 0.0], [100.0, 0.0],
+                             [100.0, 100.0], [0.0, 100.0]] * 2)
+        payload = Bag(width=200.0, height=200.0, hull=corners,
+                      turret=corners, items=ProxyList([]))
+
+        first = view.solveLayout(payload)
+        second = view.solveLayout(payload)
+        callbacks = sys.modules['BigWorld'].testCallbacks
+
+        self.assertEqual(first, {'revision': 7, 'disabled': True})
+        self.assertEqual(second, {'revision': 7, 'disabled': True})
+        self.assertEqual(len(callbacks), 1)
+        callbacks[0][1]()
+        self.assertEqual(disabled, [('showUiPoints', False)])
+
     def test_layout_bounds_use_live_hull_and_turret_providers(self):
         markerView, nativeMarkers = _loadMarkerViewModule()
         from wotstat_spotting_points.geometry import LayoutBounds
