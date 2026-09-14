@@ -8,7 +8,7 @@ from .layout_solver import (CALLOUT_GAP, EPSILON, SCREEN_MARGIN,
 
 LABEL_GAP = 6.0
 LAYOUT_SWITCH_MARGIN = 48.0
-ORDER_DEADBAND = 4.0
+ORDER_DEADBAND = 8.0
 HYSTERESIS_SECONDS = 0.8
 HYSTERESIS_RECHECK_SECONDS = 0.05
 
@@ -21,11 +21,15 @@ class SideLayoutSolver(CalloutLayoutSolver):
         self._clock = clock or time.clock
         self._holdStarted = None
         self._recheckAt = None
+        self._orderHolds = {}
+        self._orderDeltas = {}
 
     def reset(self):
         super(SideLayoutSolver, self).reset()
         self._holdStarted = None
         self._recheckAt = None
+        self._orderHolds = {}
+        self._orderDeltas = {}
 
     def solve(self, width, height, hullPoints, turretPoints, items):
         now = self._clock()
@@ -38,6 +42,7 @@ class SideLayoutSolver(CalloutLayoutSolver):
             return {'revision': self._revision}
 
         geometry = self._buildGeometry(hullPoints, turretPoints)
+        self._prepareOrder(items, now)
         obstacles = (geometry['hull'], geometry['turret'])
         spanCache = {}
         self.candidateCount = 0
@@ -153,6 +158,8 @@ class SideLayoutSolver(CalloutLayoutSolver):
         else:
             self._holdStarted = None
             self._recheckAt = None
+        if self._orderHolds:
+            self._recheckAt = now + HYSTERESIS_RECHECK_SECONDS
 
         self._revision += 1
         self._signature = signature
@@ -161,6 +168,37 @@ class SideLayoutSolver(CalloutLayoutSolver):
         self._lastResult = self._serializeResult(
             geometry, {'entries': placed, 'score': ()})
         return self._lastResult
+
+    def _prepareOrder(self, items, now):
+        # Stabilize the discrete pair order before generating rows. Holding
+        # old pixel offsets afterwards can already cause overlaps/crossings.
+        self._orderDeltas = {}
+        previous = dict((entry['id'], entry) for entry in
+                        (self._lastResult['placements'] if self._lastResult else []))
+        holds = {}
+        for index, item in enumerate(items):
+            pointId = str(item['id'])
+            for other in items[index + 1:]:
+                otherId = str(other['id'])
+                a, b = previous.get(pointId), previous.get(otherId)
+                if a is None or b is None or a['lane'] != b['lane']:
+                    continue
+                delta = float(item['y']) - float(other['y'])
+                oldDelta = (a['rect'][1] + a['rect'][3] * 0.5
+                            - b['rect'][1] - b['rect'][3] * 0.5)
+                key = (pointId, otherId)
+                if delta * oldDelta <= 0 and abs(oldDelta) > EPSILON:
+                    started = self._orderHolds.get(key, now)
+                    strength = max(0.0, 1.0 - (now - started) / HYSTERESIS_SECONDS)
+                    if strength > 0 and abs(delta) < ORDER_DEADBAND * strength:
+                        holds[key] = started
+                        self._orderDeltas[key] = oldDelta
+        self._orderHolds = holds
+
+    def _orderDelta(self, pointId, otherId, delta):
+        if pointId < otherId:
+            return self._orderDeltas.get((pointId, otherId), delta)
+        return -self._orderDeltas.get((otherId, pointId), -delta)
 
     def _verticalCandidate(self, item, obstacles, width, height):
         if str(item['id']) != 'top':
@@ -189,8 +227,9 @@ class SideLayoutSolver(CalloutLayoutSolver):
                 overlap += rectangleIntersectionArea(entry['rect'], other['rect'])
                 crossings += int(_polylinesIntersect(entry['leader'], other['leader']))
                 delta = entry['leader'][0][1] - other['leader'][0][1]
+                delta = self._orderDelta(entry['id'], other['id'], delta)
                 otherCenter = other['rect'][1] + other['rect'][3] * 0.5
-                if entry['lane'] == other['lane'] and abs(delta) > ORDER_DEADBAND:
+                if entry['lane'] == other['lane']:
                     inversions += int(delta * (center - otherCenter) < -EPSILON)
         return (0.0 if overlap < EPSILON else overlap, crossings, inversions, cost)
 
@@ -212,6 +251,7 @@ class SideLayoutSolver(CalloutLayoutSolver):
             if existing['lane'] == candidate['lane']:
                 otherCenter = existing['rect'][1] + existing['rect'][3] * 0.5
                 pointDelta = float(item['y']) - existing['leader'][0][1]
+                pointDelta = self._orderDelta(str(item['id']), existing['id'], pointDelta)
                 inversions += int(pointDelta * (centerY - otherCenter)
                                   < -EPSILON)
         rowHeight = float(item['height']) + LABEL_GAP

@@ -21,6 +21,24 @@ def item(pointId, x, y):
 
 
 class SideLayoutTests(unittest.TestCase):
+    def test_row_order_does_not_chatter_and_eventually_settles(self):
+        now = [0.0]
+        solver = SideLayoutSolver(clock=lambda: now[0])
+        def frame(y):
+            result = solver.solve(1400, 900, box(300, 250, 900, 550),
+                                  box(500, 220, 700, 420),
+                                  [item('short', 890, 380), item('long', 760, y)])
+            return dict((p['id'], p) for p in result['placements'])
+        for index, y in enumerate((382, 375, 383, 374, 382, 375)):
+            now[0] = index * 0.02
+            placements = frame(y)
+            self.assertGreater(placements['long']['rect'][1],
+                               placements['short']['rect'][1])
+        now[0] = 1.0
+        placements = frame(375)
+        self.assertLess(placements['long']['rect'][1],
+                        placements['short']['rect'][1])
+
     def test_hysteresis_expires_even_with_identical_cached_camera_input(self):
         now = [0.0]
         solver = SideLayoutSolver(clock=lambda: now[0])
