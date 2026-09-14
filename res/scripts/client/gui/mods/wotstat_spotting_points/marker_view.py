@@ -18,7 +18,7 @@ from skeletons.gui.impl import IGuiLoader
 from vehicle_systems.tankStructure import TankNodeNames, TankPartNames
 
 from .marker_logic import buildOverlayData, isOverlaySceneActive
-from .layout_solver import CalloutLayoutSolver
+from .side_layout import SideLayoutSolver
 
 VIEW_ALIAS = 'wotstatSpottingPointsMarkerOverlay'
 VIEW_SWF = 'wotstatSpottingPointsMarkers.swf'
@@ -148,7 +148,7 @@ class MarkerOverlayView(View):
         self._initializeLayoutSolver()
 
     def _initializeLayoutSolver(self):
-        self._layoutSolver = CalloutLayoutSolver()
+        self._layoutSolver = SideLayoutSolver()
         self._layoutSolverFailed = False
         self._layoutCachedSamples = deque(maxlen=240)
         self._layoutChangedSamples = deque(maxlen=240)
