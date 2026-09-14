@@ -1,5 +1,9 @@
 # Stable UI Callout Layout Prototype Design
 
+> Superseded by
+> [`2026-09-14-python-callout-layout-solver-design.md`](2026-09-14-python-callout-layout-solver-design.md).
+> This document records the earlier AS3 prototype only.
+
 ## Goal
 
 Build a «Мир танков»-only prototype of the hangar UI marker layout so labels

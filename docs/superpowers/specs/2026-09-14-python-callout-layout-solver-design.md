@@ -203,39 +203,52 @@ cheapest allowed compromise to the most severe, the strict fallback order is
 therefore forbidden-polygon intrusion, leader crossing, label overlap,
 leader-through-point, then screen overflow.
 
-## Bounded global search
+## Bounded deterministic search
 
-The solver uses deterministic beam search rather than a greedy first-fit pass or
-an exhaustive product of candidates.
+The solver uses a deterministic constrained-greedy pass plus bounded repair
+rather than an exhaustive product of candidates.
 
 - Labels are processed by descending callout width, then point id. This stable
   order places the most constrained labels first.
-- Each partial plan is expanded with every deduplicated candidate for the next
-  label.
-- Candidate-local cost is precomputed once. Only cheap pairwise rectangle and
-  segment costs are added during expansion.
-- After each label, plans are sorted by numeric score and then a stable
-  lane/candidate signature. Only the best `BEAM_WIDTH = 64` plans survive.
-- The lowest final plan is applied atomically.
+- Candidate-local cost is precomputed once and candidates are sorted by that
+  cost plus a stable lane/index signature.
+- For the next label, candidates are compared against already selected labels.
+  Evaluation stops at the first candidate without a pairwise conflict because
+  no later candidate can improve its higher-priority score components.
+- If the completed pass still contains a pairwise conflict, at most two repair
+  passes reconsider only participating labels. Repair is capped at 192 pair
+  scores.
+- The resulting complete plan is applied atomically.
 
 The domain has at most seven labels and at most fifteen raw candidates per
-label. The fixed beam bound prevents input-dependent combinatorial growth.
+label. Fixed repair limits prevent input-dependent combinatorial growth.
 
 ## Temporal stability without jelly
 
-The solver stores only `lastLaneByPointId`. A candidate in a lane different
-from the last selected lane pays `LANE_SWITCH_PENALTY`. After a real switch, the
-new lane becomes the remembered lane, so immediately switching back must beat
-the same penalty in the opposite direction. This creates a score hysteresis
-band without a timer.
+The solver stores the last lane and discrete lane/offset candidate for each
+point. A candidate in a lane different from the last selected lane pays
+`LANE_SWITCH_PENALTY`. After a real switch, the new lane becomes the remembered
+lane, so immediately switching back must beat the same penalty in the opposite
+direction. This creates a score hysteresis band without a timer.
+
+On changed input, the solver first rebuilds only those remembered candidates.
+If a higher-priority conflict count increases, it builds the complete candidate
+set only for the labels participating in that conflict and repairs them
+atomically. Without a new conflict, a label is reconsidered only after its
+current leader cost has grown by more than 64 pixels since its last evaluation.
+A full all-label pass is reserved for initial layout, membership changes, and
+the rare case where targeted repair cannot preserve the previous conflict
+counts. There is no wall-clock callback: if motion stops, no later
+reconsideration or move occurs.
 
 There is no interpolation, easing, velocity, delayed slot queue, or retained
 screen coordinate. Placement coordinates within the current lane follow every
 changed input immediately, and all labels are applied together in one frame.
 Camera rotation therefore cannot create trailing callouts after motion stops.
 
-Lane memory is deleted when a point disappears and fully reset on vehicle
-change, marker clear, view disposal, or invalidation of the overlay lifecycle.
+Lane, candidate, and last-evaluated-cost memory is deleted when a point
+disappears and fully reset on vehicle change, marker clear, view disposal, or
+invalidation of the overlay lifecycle.
 
 ## AS3 responsibilities after migration
 
@@ -324,6 +337,14 @@ The reference performance targets are:
 - changed-layout solver work below 4 ms at the 95th percentile during the
   controlled camera sweep;
 - no new mod traceback or repeated error log.
+
+RU acceptance on the installed 0.3.0 package used 189 changed frames in a
+continuous camera sweep: median solve time was 1.158 ms, p95 was 2.690 ms, and
+four frames required the all-label search. The following 240 cached callbacks
+had a 0.198 ms median. Static smooth FPS was 58.3 both with callouts visible and
+hidden. Ordinary, extreme-close, and top-down layouts, multiple top labels,
+forbidden-zone fallback, and the Alt debug overlay were also inspected; the
+current client log contained no solver error or traceback.
 
 The Python view records separate rolling samples for the last 240 cached bridge
 callbacks and changed-layout solves using `time.clock()`. It also records cache
