@@ -21,6 +21,36 @@ def item(pointId, x, y):
 
 
 class SideLayoutTests(unittest.TestCase):
+    def test_row_holds_through_small_y_changes_but_releases_a_collision(self):
+        solver = SideLayoutSolver()
+        def frame(y):
+            result = solver.solve(1400, 900, box(300, 250, 900, 550),
+                                  box(500, 220, 700, 420),
+                                  [item('short', 890, 380), item('long', 760, y)])
+            return dict((p['id'], p) for p in result['placements'])
+        for y in (382, 381, 379, 382, 378):
+            placements = frame(y)
+            self.assertGreater(placements['long']['rect'][1],
+                               placements['short']['rect'][1])
+        placements = frame(370)
+        self.assertLess(placements['long']['rect'][1], placements['short']['rect'][1])
+        self.assertEqual(rectangleIntersectionArea(placements['long']['rect'],
+                                                   placements['short']['rect']), 0)
+
+    def test_side_does_not_chatter_near_equal_projection_lengths(self):
+        solver = SideLayoutSolver()
+        def frame(x):
+            return solver.solve(1400, 900, box(300, 250, 900, 550),
+                                box(500, 220, 700, 420), [item('a', x, 380)])
+        self.assertEqual(frame(599)['placements'][0]['lane'], 'left')
+        for x in (601, 598, 602, 599, 601):
+            placement = frame(x)['placements'][0]
+            self.assertEqual(placement['lane'], 'left')
+            self.assertEqual(placement['leader'][0], [x, 380])
+        self.assertEqual(frame(650)['placements'][0]['lane'], 'right')
+        solver.reset()
+        self.assertEqual(frame(599)['placements'][0]['lane'], 'left')
+
     def test_short_front_projection_is_not_displaced_by_long_gun_callouts(self):
         path = os.path.join(os.path.dirname(__file__), 'fixtures',
                             'callouts_side_view.json')

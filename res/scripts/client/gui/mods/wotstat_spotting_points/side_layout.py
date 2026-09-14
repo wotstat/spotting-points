@@ -5,6 +5,8 @@ from .layout_solver import (CALLOUT_GAP, EPSILON, SCREEN_MARGIN,
 
 
 LABEL_GAP = 6.0
+LAYOUT_SWITCH_MARGIN = 48.0
+ORDER_DEADBAND = 4.0
 
 
 class SideLayoutSolver(CalloutLayoutSolver):
@@ -76,6 +78,30 @@ class SideLayoutSolver(CalloutLayoutSolver):
             chosen['id'] = pointId
             placed.append(chosen)
 
+        # Keep the previous choices in current geometry, not frozen pixels.
+        # The six-pixel label gap provides room for small relative movements.
+        if self._lastResult is not None:
+            previous = self._lastResult['placements']
+            itemById = dict((str(item['id']), item) for item in items)
+            if set(itemById) == set(entry['id'] for entry in previous):
+                retained = []
+                for entry in previous:
+                    item = itemById[entry['id']]
+                    offset = (entry['rect'][1] + entry['rect'][3] * 0.5
+                              - entry['leader'][0][1])
+                    choice = candidate(item, entry['lane'], float(item['y']) + offset)
+                    if choice is None:
+                        break
+                    choice['id'] = entry['id']
+                    retained.append(choice)
+                if len(retained) == len(previous):
+                    oldScore = self._stabilityScore(retained)
+                    newScore = self._stabilityScore(placed)
+                    if (all(a <= b for a, b in zip(oldScore[:3], newScore[:3]))
+                            and oldScore[3] <= newScore[3] + LAYOUT_SWITCH_MARGIN):
+                        placed = retained
+                        self.stablePlanHits += 1
+
         self._revision += 1
         self._signature = signature
         self.lastChanged = True
@@ -83,6 +109,24 @@ class SideLayoutSolver(CalloutLayoutSolver):
         self._lastResult = self._serializeResult(
             geometry, {'entries': placed, 'score': ()})
         return self._lastResult
+
+    def _stabilityScore(self, entries):
+        overlap = 0.0
+        crossings = 0
+        inversions = 0
+        cost = 0.0
+        for index, entry in enumerate(entries):
+            center = entry['rect'][1] + entry['rect'][3] * 0.5
+            cost += (_polylineLength(entry['leader'])
+                     + abs(center - entry['leader'][0][1]) * 4.0)
+            for other in entries[index + 1:]:
+                overlap += rectangleIntersectionArea(entry['rect'], other['rect'])
+                crossings += int(_polylinesIntersect(entry['leader'], other['leader']))
+                delta = entry['leader'][0][1] - other['leader'][0][1]
+                otherCenter = other['rect'][1] + other['rect'][3] * 0.5
+                if entry['lane'] == other['lane'] and abs(delta) > ORDER_DEADBAND:
+                    inversions += int(delta * (center - otherCenter) < -EPSILON)
+        return (0.0 if overlap < EPSILON else overlap, crossings, inversions, cost)
 
     def _overlap(self, candidate, placed):
         x, y, width, height = candidate['rect']
