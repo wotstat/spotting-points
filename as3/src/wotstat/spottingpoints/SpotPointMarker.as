@@ -37,7 +37,7 @@ package wotstat.spottingpoints {
 
             connector = new Shape();
             connector.filters = [
-                new GlowFilter(0x000000, 0.65, 16, 16, 1, 3)
+                new GlowFilter(0x000000, 0.65, 16, 16, 1.5, 3)
             ];
             addChild(connector);
 
