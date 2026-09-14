@@ -15,6 +15,7 @@ package wotstat.spottingpoints {
         private static const BOUNDS_PADDING:Number = 18;
         private static const SIDE_HYSTERESIS:Number = 36;
         private static const SIDE_CONFIRM_FRAMES:int = 8;
+        private static const ORDER_CONFIRM_FRAMES:int = 8;
         private static const POSITION_DEADBAND:Number = 2;
         private static const SMOOTH_TIME_MS:Number = 110;
         private static const MAX_SLOT_ATTEMPTS:int = 16;
@@ -22,6 +23,7 @@ package wotstat.spottingpoints {
         private var markers:Dictionary = new Dictionary();
         private var layoutAnchors:Dictionary = new Dictionary();
         private var layoutStates:Dictionary = new Dictionary();
+        private var orderGroups:Dictionary = new Dictionary();
         private var active:Boolean = true;
         private var lastLayoutTime:int = 0;
         private var lastAppWidth:Number = -1;
@@ -80,7 +82,6 @@ package wotstat.spottingpoints {
                     marker.setHovered(id == hoveredId);
                 }
             }
-            layoutCallouts();
         }
 
         public function as_hitTest(cursorX:Number, cursorY:Number):String {
@@ -179,9 +180,7 @@ package wotstat.spottingpoints {
                     "turret" : "hull";
                 var avoidance:Rectangle = region == "turret" ?
                     turretBounds : hullBounds;
-                var state:Object = layoutState(
-                    marker.pointId, region, position.y);
-                updateStableOrder(state, position.y);
+                var state:Object = layoutState(marker.pointId, region);
                 var item:Object = {
                     "marker": marker,
                     "markerX": position.x,
@@ -198,6 +197,9 @@ package wotstat.spottingpoints {
                     item, width);
                 (side == "left" ? left : right).push(item);
             }
+
+            updateStableOrders(left, "left");
+            updateStableOrders(right, "right");
 
             var occupied:Array = [];
             var avoidanceBounds:Array = [hullBounds, turretBounds];
@@ -277,19 +279,15 @@ package wotstat.spottingpoints {
             return pointId == "gunStatic" || pointId == "gunMoving";
         }
 
-        private function layoutState(pointId:String, region:String,
-                                     markerY:Number):Object {
+        private function layoutState(pointId:String, region:String):Object {
             var state:Object = layoutStates[pointId];
             if (state == null) {
                 state = {
                     "region": region,
                     "side": null,
-                    "order": markerY,
-                    "stableY": markerY,
+                    "order": 0,
                     "pendingSide": null,
                     "pendingFrames": 0,
-                    "pendingOrder": 0,
-                    "pendingOrderFrames": 0,
                     "displayX": 0,
                     "displayY": 0,
                     "initialized": false
@@ -301,25 +299,70 @@ package wotstat.spottingpoints {
             return state;
         }
 
-        private function updateStableOrder(state:Object,
-                                           markerY:Number):void {
-            var delta:Number = markerY - Number(state.stableY);
-            if (Math.abs(delta) <= CALLOUT_GAP * 0.5) {
-                state.pendingOrderFrames = 0;
+        private function updateStableOrders(items:Array,
+                                            side:String):void {
+            if (items.length == 0) {
+                delete orderGroups[side];
                 return;
             }
-            var direction:Number = delta < 0 ? -1 : 1;
-            if (Number(state.pendingOrder) != direction) {
-                state.pendingOrder = direction;
-                state.pendingOrderFrames = 1;
+
+            var projected:Array = items.concat();
+            projected.sort(compareProjectedOrder);
+            var orderedIds:Array = [];
+            var membershipIds:Array = [];
+            for each (var item:Object in projected) {
+                var pointId:String = SpotPointMarker(item.marker).pointId;
+                orderedIds.push(pointId);
+                membershipIds.push(pointId);
+            }
+            membershipIds.sort();
+            var membership:String = membershipIds.join("|");
+            var signature:String = orderedIds.join("|");
+            var group:Object = orderGroups[side];
+            if (group == null || String(group.membership) != membership) {
+                group = {
+                    "membership": membership,
+                    "signature": signature,
+                    "pendingSignature": null,
+                    "pendingFrames": 0
+                };
+                orderGroups[side] = group;
+                commitStableOrder(projected);
+                return;
+            }
+            if (String(group.signature) == signature) {
+                group.pendingSignature = null;
+                group.pendingFrames = 0;
+                return;
+            }
+            if (group.pendingSignature != signature) {
+                group.pendingSignature = signature;
+                group.pendingFrames = 1;
             } else {
-                state.pendingOrderFrames++;
+                group.pendingFrames++;
             }
-            if (int(state.pendingOrderFrames) >= SIDE_CONFIRM_FRAMES) {
-                state.stableY = markerY;
-                state.order = markerY;
-                state.pendingOrderFrames = 0;
+            if (int(group.pendingFrames) >= ORDER_CONFIRM_FRAMES) {
+                group.signature = signature;
+                group.pendingSignature = null;
+                group.pendingFrames = 0;
+                commitStableOrder(projected);
             }
+        }
+
+        private function commitStableOrder(items:Array):void {
+            for (var index:int = 0; index < items.length; index++) {
+                items[index].state.order = index;
+            }
+        }
+
+        private function compareProjectedOrder(a:Object, b:Object):Number {
+            var difference:Number = Number(a.markerY) - Number(b.markerY);
+            if (difference != 0) {
+                return difference;
+            }
+            var aId:String = SpotPointMarker(a.marker).pointId;
+            var bId:String = SpotPointMarker(b.marker).pointId;
+            return aId < bId ? -1 : (aId == bId ? 0 : 1);
         }
 
         private function updateStableSide(item:Object,
@@ -618,6 +661,7 @@ package wotstat.spottingpoints {
 
         private function resetLayoutState():void {
             layoutStates = new Dictionary();
+            orderGroups = new Dictionary();
             lastLayoutTime = 0;
         }
 
@@ -642,6 +686,7 @@ package wotstat.spottingpoints {
             markers = null;
             layoutAnchors = null;
             layoutStates = null;
+            orderGroups = null;
             super.onDispose();
         }
     }

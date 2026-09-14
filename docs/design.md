@@ -62,4 +62,6 @@ CollisionComponent.getBoundingBox, TankNodeNames.GUN_JOINT,
 GUI.HangarVehicleMarker/WGHangarVehicleMarker, Math.MatrixProduct,
 realm.CURRENT_REALM.
 WoT использует обратный порядок проходов из исходного DrawerController.
-Runtime тестируется через MCP WotStat REPL 1.4.1 в MT 1.45 и WoT EU 2.4.
+Новая callout-раскладка прототипа runtime-проверена через MCP WotStat REPL
+1.4.1 только в «Мир танков» 1.45; проверка этого поведения в WoT EU пока не
+заявлена.
