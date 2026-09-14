@@ -38,7 +38,11 @@ class CalloutTransitions(object):
                 if previous is not None and (
                         previous['lane'] != target['lane']
                         or abs(_offsetY(previous) - _offsetY(target))
-                        >= target['rect'][3] * 0.5):
+                        >= target['rect'][3] * 0.5
+                        or (target['lane'] == 'top' and abs(
+                            previous['rect'][0] - previous['leader'][0][0]
+                            - target['rect'][0] + target['leader'][0][0])
+                            >= target['rect'][2] * 0.5)):
                     visible = self._render(pointId, now)
                     self._animations[pointId] = (now, _relative(visible))
                 self._targets[pointId] = target

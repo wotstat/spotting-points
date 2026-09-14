@@ -15,10 +15,14 @@ VIEW_SWF = 'wotstatSpottingPointsSettings.swf'
 
 LABELS = {
     'title': 'Габаритные и обзорные точки',
-    'showMaskPoints': 'Отображать габаритные точки',
-    'showSpotPoints': 'Отображать обзорные точки',
-    'showUiPoints': 'Отображать точки в UI',
-    'showGuides': 'Отображать направляющие',
+    'showMaskPoints': 'Габаритные точки',
+    'showSpotPoints': 'Обзорные точки',
+    'showUiPoints': 'Отображать маркеры',
+    'showGuides': 'Направляющие',
+    'group3d': '3D',
+    'groupUi': 'UI',
+    'callouts': 'Сноски',
+    'calloutModes': ['Не отображать', 'Вариант А', 'Вариант Б'],
     'allowTurretRotation': 'Разрешить вращение башни мышью',
     'layoutDebug': 'Отладочная отрисовка зон размещения',
 }
@@ -101,7 +105,7 @@ class SettingsWindow(AbstractWindowView):
 
     def optionChanged(self, name, value):
         if self._controller is not None:
-            self._controller.setOption(str(name), bool(value))
+            self._controller.setOption(str(name), value)
 
     def onWindowClose(self):
         self.destroy()

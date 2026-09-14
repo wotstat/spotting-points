@@ -27,6 +27,7 @@ package wotstat.spottingpoints {
         private var pulseTween:Tween;
         private var persistentCallout:Boolean = false;
         private var hovered:Boolean = false;
+        private var calloutsEnabled:Boolean = true;
         private var currentLabel:String = "";
 
         public function SpotPointMarker(id:String, label:String) {
@@ -89,6 +90,11 @@ package wotstat.spottingpoints {
 
         public function setHovered(value:Boolean):void {
             hovered = value;
+            updateCalloutVisibility();
+        }
+
+        public function setCalloutsEnabled(value:Boolean):void {
+            calloutsEnabled = value;
             updateCalloutVisibility();
         }
 
@@ -174,7 +180,7 @@ package wotstat.spottingpoints {
         }
 
         private function updateCalloutVisibility():void {
-            callout.visible = persistentCallout || hovered;
+            callout.visible = calloutsEnabled && (persistentCallout || hovered);
             connector.visible = callout.visible;
         }
     }

@@ -46,11 +46,13 @@ class SpottingPointsController(object):
                 hideMarkerView(self)
         elif name == 'layoutDebug' and self._markerView is not None:
             self._markerView.setLayoutDebug(self.options.layoutDebug)
+        elif name == 'calloutMode' and self._markerView is not None:
+            self._markerView.setCalloutMode(self.options.calloutMode)
         if self.options.hasVisuals():
             self._start()
         else:
             self._stop()
-        log.info('Option %s=%s', name, bool(value))
+        log.info('Option %s=%s', name, value)
         return True
 
     def destroy(self):
@@ -83,6 +85,7 @@ class SpottingPointsController(object):
     def attachMarkerView(self, view):
         self._markerView = view
         view.setLayoutDebug(self.options.layoutDebug)
+        view.setCalloutMode(self.options.calloutMode)
 
     def detachMarkerView(self, view):
         if self._markerView is view:

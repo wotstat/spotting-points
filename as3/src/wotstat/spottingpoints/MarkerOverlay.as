@@ -14,6 +14,7 @@ package wotstat.spottingpoints {
         private var debugOverlay:LayoutDebugOverlay;
         private var layoutDebug:Boolean = false;
         private var active:Boolean = true;
+        private var calloutsEnabled:Boolean = true;
         private var lastLayoutRevision:Number = -1;
         private var lastLayoutResult:Object;
 
@@ -43,6 +44,7 @@ package wotstat.spottingpoints {
                 return existing;
             }
             var marker:SpotPointMarker = new SpotPointMarker(id, label);
+            marker.setCalloutsEnabled(calloutsEnabled);
             markers[id] = marker;
             addChild(marker);
             return marker;
@@ -107,6 +109,13 @@ package wotstat.spottingpoints {
                 debugOverlay.render(lastLayoutResult);
             } else if (!value) {
                 debugOverlay.clear();
+            }
+        }
+
+        public function as_setCalloutsEnabled(value:Boolean):void {
+            calloutsEnabled = value;
+            for each (var marker:SpotPointMarker in markers) {
+                marker.setCalloutsEnabled(value);
             }
         }
 

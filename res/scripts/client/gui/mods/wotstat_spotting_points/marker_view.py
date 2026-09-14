@@ -19,6 +19,7 @@ from vehicle_systems.tankStructure import TankNodeNames, TankPartNames
 
 from .marker_logic import buildOverlayData, isOverlaySceneActive
 from .side_layout import SideLayoutSolver
+from .layout_solver import CalloutLayoutSolver
 from .callout_transition import CalloutTransitions
 
 VIEW_ALIAS = 'wotstatSpottingPointsMarkerOverlay'
@@ -269,6 +270,12 @@ class MarkerOverlayView(View):
     def setLayoutDebug(self, value):
         if self._ready:
             self.flashObject.as_setLayoutDebug(bool(value))
+
+    def setCalloutMode(self, mode):
+        self._layoutSolver = CalloutLayoutSolver() if mode == 1 else SideLayoutSolver()
+        self._layoutSolverFailed = False
+        if self._ready:
+            self.flashObject.as_setCalloutsEnabled(mode != 0)
 
     def _onWindowStatusChanged(self, uniqueId, status):
         self._refreshSceneActive()

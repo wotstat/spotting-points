@@ -19,8 +19,19 @@ class DisplayOptionsTests(unittest.TestCase):
             'showGuides': False,
             'allowTurretRotation': False,
             'layoutDebug': False,
+            'calloutMode': 2,
         })
         self.assertFalse(options.hasVisuals())
+
+    def test_callout_modes_preserve_numeric_selection(self):
+        from wotstat_spotting_points.options import DisplayOptions
+        options = DisplayOptions()
+        for mode in (0, 1, 2):
+            self.assertTrue(options.setValue('calloutMode', mode))
+            self.assertEqual(options.asDict()['calloutMode'], mode)
+            self.assertFalse(options.hasVisuals())
+        self.assertFalse(options.setValue('calloutMode', 3))
+        self.assertEqual(options.calloutMode, 2)
 
     def test_ui_points_are_an_independent_visual(self):
         from wotstat_spotting_points.options import DisplayOptions

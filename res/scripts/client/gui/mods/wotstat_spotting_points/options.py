@@ -7,15 +7,23 @@ class DisplayOptions(object):
     def __init__(self):
         for name in OPTION_NAMES:
             setattr(self, name, False)
+        self.calloutMode = 2
 
     def setValue(self, name, value):
+        if name == 'calloutMode':
+            if value not in (0, 1, 2):
+                return False
+            self.calloutMode = int(value)
+            return True
         if name not in OPTION_NAMES:
             return False
         setattr(self, name, bool(value))
         return True
 
     def asDict(self):
-        return dict((name, getattr(self, name)) for name in OPTION_NAMES)
+        result = dict((name, getattr(self, name)) for name in OPTION_NAMES)
+        result['calloutMode'] = self.calloutMode
+        return result
 
     def hasVisuals(self):
         return (self.showMaskPoints or self.showSpotPoints

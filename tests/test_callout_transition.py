@@ -17,6 +17,16 @@ def layout(x, y=288.0, lane='left', anchor=(400.0, 300.0)):
 
 
 class CalloutTransitionTests(unittest.TestCase):
+    def test_horizontal_top_slot_jump_animates_but_small_motion_does_not(self):
+        renderer = CalloutTransitions()
+        renderer.apply(layout(300, 180, 'top'), 0)
+        self.assertEqual(renderer.apply(layout(302, 180, 'top'), 0.1)
+                         ['placements'][0]['rect'][0], 302)
+        self.assertEqual(renderer.apply(layout(460, 180, 'top'), 1)
+                         ['placements'][0]['rect'][0], 302)
+        self.assertEqual(renderer.apply({'revision': 1}, 1.3)
+                         ['placements'][0]['rect'][0], 460)
+
     def test_transition_to_vertical_leader_keeps_the_previous_line_at_start(self):
         renderer = CalloutTransitions()
         initial = layout(100)
