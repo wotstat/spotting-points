@@ -4,7 +4,6 @@ package wotstat.spottingpoints {
     import flash.events.Event;
     import flash.geom.Point;
     import flash.geom.Rectangle;
-    import flash.utils.getTimer;
     import flash.utils.Dictionary;
     import net.wg.infrastructure.base.AbstractView;
 
@@ -13,21 +12,13 @@ package wotstat.spottingpoints {
         private static const EDGE_OFFSET:Number = 18;
         private static const SCREEN_MARGIN:Number = 8;
         private static const BOUNDS_PADDING:Number = 18;
-        private static const SIDE_HYSTERESIS:Number = 36;
-        private static const SIDE_CONFIRM_FRAMES:int = 8;
-        private static const ORDER_CONFIRM_FRAMES:int = 8;
-        private static const POSITION_DEADBAND:Number = 2;
-        private static const SMOOTH_TIME_MS:Number = 110;
+        private static const TOP_LEADER_WEIGHT:Number = 4;
+        private static const BLOCKED_PLACEMENT_PENALTY:Number = 1000000;
         private static const MAX_SLOT_ATTEMPTS:int = 16;
 
         private var markers:Dictionary = new Dictionary();
         private var layoutAnchors:Dictionary = new Dictionary();
-        private var layoutStates:Dictionary = new Dictionary();
-        private var orderGroups:Dictionary = new Dictionary();
         private var active:Boolean = true;
-        private var lastLayoutTime:int = 0;
-        private var lastAppWidth:Number = -1;
-        private var lastAppHeight:Number = -1;
 
         public function MarkerOverlay() {
             super();
@@ -114,7 +105,6 @@ package wotstat.spottingpoints {
                 removeChild(layoutAnchors[key] as DisplayObject);
                 delete layoutAnchors[key];
             }
-            resetLayoutState();
         }
 
         public function as_removeMarker(id:String):void {
@@ -134,20 +124,6 @@ package wotstat.spottingpoints {
             if (width <= 0 || height <= 0) {
                 return;
             }
-            if (width != lastAppWidth || height != lastAppHeight) {
-                resetLayoutState();
-                lastAppWidth = width;
-                lastAppHeight = height;
-            }
-            var now:int = getTimer();
-            var elapsedMs:Number = lastLayoutTime > 0 ?
-                Math.max(0, now - lastLayoutTime) : 16;
-            lastLayoutTime = now;
-            var smoothingAlpha:Number = 1 - Math.exp(
-                -elapsedMs / SMOOTH_TIME_MS);
-            var left:Array = [];
-            var right:Array = [];
-            var topItem:Object = null;
             var marker:SpotPointMarker;
             for each (marker in markers) {
                 if (!marker.visible) {
@@ -170,48 +146,31 @@ package wotstat.spottingpoints {
                 return;
             }
             var vehicleBounds:Rectangle = hullBounds.union(turretBounds);
+            var items:Array = [];
 
             for each (marker in visibleMarkers) {
                 if (!marker.isCalloutVisible) {
                     continue;
                 }
                 var position:Point = displayPosition(marker);
-                var region:String = isTurretPoint(marker.pointId) ?
-                    "turret" : "hull";
-                var avoidance:Rectangle = region == "turret" ?
+                var avoidance:Rectangle = isTurretPoint(marker.pointId) ?
                     turretBounds : hullBounds;
-                var state:Object = layoutState(marker.pointId, region);
-                var item:Object = {
+                items.push({
                     "marker": marker,
                     "markerX": position.x,
                     "markerY": position.y,
-                    "avoidance": avoidance,
-                    "state": state
-                };
-                if (marker.pointId == "top") {
-                    state.side = "top";
-                    topItem = item;
-                    continue;
-                }
-                var side:String = updateStableSide(
-                    item, width);
-                (side == "left" ? left : right).push(item);
+                    "avoidance": avoidance
+                });
             }
 
-            updateStableOrders(left, "left");
-            updateStableOrders(right, "right");
-
-            var occupied:Array = [];
             var avoidanceBounds:Array = [hullBounds, turretBounds];
-            if (topItem != null) {
-                occupied.push(layoutTop(
-                    topItem, vehicleBounds, width, height,
-                    smoothingAlpha));
+            items.sort(comparePointId);
+            var plan:Object = chooseLayoutPlan(
+                items, vehicleBounds, avoidanceBounds,
+                width, height);
+            if (plan != null) {
+                applyLayoutPlan(plan);
             }
-            layoutSide(left, "left", avoidanceBounds, occupied,
-                       width, height, smoothingAlpha);
-            layoutSide(right, "right", avoidanceBounds, occupied,
-                       width, height, smoothingAlpha);
         }
 
         private function displayPosition(value:DisplayObject):Point {
@@ -279,82 +238,6 @@ package wotstat.spottingpoints {
             return pointId == "gunStatic" || pointId == "gunMoving";
         }
 
-        private function layoutState(pointId:String, region:String):Object {
-            var state:Object = layoutStates[pointId];
-            if (state == null) {
-                state = {
-                    "region": region,
-                    "side": null,
-                    "order": 0,
-                    "pendingSide": null,
-                    "pendingFrames": 0,
-                    "displayX": 0,
-                    "displayY": 0,
-                    "initialized": false
-                };
-                layoutStates[pointId] = state;
-            } else {
-                state.region = region;
-            }
-            return state;
-        }
-
-        private function updateStableOrders(items:Array,
-                                            side:String):void {
-            if (items.length == 0) {
-                delete orderGroups[side];
-                return;
-            }
-
-            var projected:Array = items.concat();
-            projected.sort(compareProjectedOrder);
-            var orderedIds:Array = [];
-            var membershipIds:Array = [];
-            for each (var item:Object in projected) {
-                var pointId:String = SpotPointMarker(item.marker).pointId;
-                orderedIds.push(pointId);
-                membershipIds.push(pointId);
-            }
-            membershipIds.sort();
-            var membership:String = membershipIds.join("|");
-            var signature:String = orderedIds.join("|");
-            var group:Object = orderGroups[side];
-            if (group == null || String(group.membership) != membership) {
-                group = {
-                    "membership": membership,
-                    "signature": signature,
-                    "pendingSignature": null,
-                    "pendingFrames": 0
-                };
-                orderGroups[side] = group;
-                commitStableOrder(projected);
-                return;
-            }
-            if (String(group.signature) == signature) {
-                group.pendingSignature = null;
-                group.pendingFrames = 0;
-                return;
-            }
-            if (group.pendingSignature != signature) {
-                group.pendingSignature = signature;
-                group.pendingFrames = 1;
-            } else {
-                group.pendingFrames++;
-            }
-            if (int(group.pendingFrames) >= ORDER_CONFIRM_FRAMES) {
-                group.signature = signature;
-                group.pendingSignature = null;
-                group.pendingFrames = 0;
-                commitStableOrder(projected);
-            }
-        }
-
-        private function commitStableOrder(items:Array):void {
-            for (var index:int = 0; index < items.length; index++) {
-                items[index].state.order = index;
-            }
-        }
-
         private function compareProjectedOrder(a:Object, b:Object):Number {
             var difference:Number = Number(a.markerY) - Number(b.markerY);
             if (difference != 0) {
@@ -365,56 +248,95 @@ package wotstat.spottingpoints {
             return aId < bId ? -1 : (aId == bId ? 0 : 1);
         }
 
-        private function updateStableSide(item:Object,
-                                          width:Number):String {
-            var marker:SpotPointMarker = item.marker as SpotPointMarker;
-            var state:Object = item.state;
-            var bounds:Rectangle = item.avoidance as Rectangle;
-            var centerX:Number = bounds.x + bounds.width * 0.5;
-            var side:String = state.side as String;
-            if (side != "left" && side != "right") {
-                if (Number(item.markerX) < centerX - SIDE_HYSTERESIS) {
-                    side = "left";
-                } else if (Number(item.markerX) > centerX +
-                           SIDE_HYSTERESIS) {
-                    side = "right";
-                } else {
-                    side = prefersLeft(marker.pointId) ? "left" : "right";
+        private function comparePointId(a:Object, b:Object):Number {
+            var aId:String = SpotPointMarker(a.marker).pointId;
+            var bId:String = SpotPointMarker(b.marker).pointId;
+            return aId < bId ? -1 : (aId == bId ? 0 : 1);
+        }
+
+        private function chooseLayoutPlan(
+                items:Array, vehicleBounds:Rectangle,
+                avoidanceBounds:Array, width:Number,
+                height:Number):Object {
+            var best:Object = null;
+            for each (var item:Object in items) {
+                var candidate:Object = buildLayoutPlan(
+                    items, item, vehicleBounds, avoidanceBounds,
+                    width, height);
+                if (candidate != null && (best == null ||
+                        Number(candidate.score) < Number(best.score) ||
+                        (Number(candidate.score) == Number(best.score) &&
+                         String(candidate.signature) <
+                         String(best.signature)))) {
+                    best = candidate;
                 }
-                state.side = side;
             }
-            var opposite:String = side == "left" ? "right" : "left";
-            if (!sideUsable(side, bounds, marker.calloutWidth, width) &&
-                    sideUsable(opposite, bounds, marker.calloutWidth, width)) {
-                state.side = opposite;
-                state.pendingSide = null;
-                state.pendingFrames = 0;
-                return opposite;
+            if (best == null) {
+                best = buildLayoutPlan(
+                    items, null, vehicleBounds, avoidanceBounds,
+                    width, height);
             }
-            var desired:String = side;
-            if (Number(item.markerX) < centerX - SIDE_HYSTERESIS) {
-                desired = "left";
-            } else if (Number(item.markerX) > centerX + SIDE_HYSTERESIS) {
-                desired = "right";
+            return best;
+        }
+
+        private function buildLayoutPlan(
+                items:Array, topItem:Object, vehicleBounds:Rectangle,
+                avoidanceBounds:Array, width:Number,
+                height:Number):Object {
+            var plan:Object = {
+                "placements": [],
+                "score": 0,
+                "signature": ""
+            };
+            var occupied:Array = [];
+            if (topItem != null) {
+                var top:Object = topPlacement(
+                    topItem, vehicleBounds, width, height);
+                if (top == null) {
+                    return null;
+                }
+                appendPlannedPlacement(
+                    plan, topItem, top, occupied,
+                    avoidanceBounds, false);
             }
-            if (desired == side) {
-                state.pendingSide = null;
-                state.pendingFrames = 0;
-                return side;
+
+            var left:Array = [];
+            var right:Array = [];
+            for each (var item:Object in items) {
+                if (item === topItem) {
+                    continue;
+                }
+                var side:String = preferredSide(item, width);
+                (side == "left" ? left : right).push(item);
             }
-            if (state.pendingSide != desired) {
-                state.pendingSide = desired;
-                state.pendingFrames = 1;
-            } else {
-                state.pendingFrames++;
+            planSide(left, "left", avoidanceBounds, occupied,
+                     plan, width, height);
+            planSide(right, "right", avoidanceBounds, occupied,
+                     plan, width, height);
+            return plan;
+        }
+
+        private function preferredSide(item:Object, width:Number):String {
+            var marker:SpotPointMarker = item.marker as SpotPointMarker;
+            var bounds:Rectangle = item.avoidance as Rectangle;
+            var leftUsable:Boolean = sideUsable(
+                "left", bounds, marker.calloutWidth, width);
+            var rightUsable:Boolean = sideUsable(
+                "right", bounds, marker.calloutWidth, width);
+            if (leftUsable && !rightUsable) {
+                return "left";
             }
-            if (int(state.pendingFrames) >= SIDE_CONFIRM_FRAMES) {
-                state.side = desired;
-                state.pendingSide = null;
-                state.pendingFrames = 0;
-                return desired;
+            if (rightUsable && !leftUsable) {
+                return "right";
             }
-            return side;
+            var leftDistance:Number = Math.abs(
+                Number(item.markerX) - (bounds.left - EDGE_OFFSET));
+            var rightDistance:Number = Math.abs(
+                Number(item.markerX) - (bounds.right + EDGE_OFFSET));
+            if (leftDistance != rightDistance) {
+                return leftDistance < rightDistance ? "left" : "right";
+            }
+            return prefersLeft(marker.pointId) ? "left" : "right";
         }
 
         private function prefersLeft(pointId:String):Boolean {
@@ -433,9 +355,9 @@ package wotstat.spottingpoints {
                    (bounds.right + EDGE_OFFSET) >= calloutWidth;
         }
 
-        private function layoutTop(item:Object, bounds:Rectangle,
-                                   width:Number, height:Number,
-                                   smoothingAlpha:Number):Rectangle {
+        private function topPlacement(item:Object, bounds:Rectangle,
+                                      width:Number,
+                                      height:Number):Object {
             var marker:SpotPointMarker = item.marker as SpotPointMarker;
             var boxX:Number = clamp(
                 Number(item.markerX) - marker.calloutWidth * 0.5,
@@ -447,23 +369,27 @@ package wotstat.spottingpoints {
                 SCREEN_MARGIN,
                 Math.max(SCREEN_MARGIN,
                          height - SCREEN_MARGIN - marker.calloutHeight));
-            var placement:Object = {
+            var rect:Rectangle = new Rectangle(
+                boxX, boxY, marker.calloutWidth, marker.calloutHeight);
+            if (rect.intersects(bounds)) {
+                return null;
+            }
+            return {
                 "x": boxX,
                 "y": boxY,
-                "placement": "top"
+                "placement": "top",
+                "rect": rect
             };
-            return applyPlacement(
-                item, placement, smoothingAlpha, [], [bounds]);
         }
 
-        private function layoutSide(items:Array, side:String,
-                                    avoidanceBounds:Array, occupied:Array,
-                                    width:Number, height:Number,
-                                    smoothingAlpha:Number):void {
+        private function planSide(items:Array, side:String,
+                                  avoidanceBounds:Array, occupied:Array,
+                                  plan:Object, width:Number,
+                                  height:Number):void {
             if (items.length == 0) {
                 return;
             }
-            items.sort(compareStableOrder);
+            items.sort(compareProjectedOrder);
             var minimum:Number = SCREEN_MARGIN +
                 SpotPointMarker(items[0].marker).calloutHeight * 0.5;
             var maximum:Number = height - minimum;
@@ -493,6 +419,7 @@ package wotstat.spottingpoints {
             }
             for each (item in items) {
                 var chosenSide:String = side;
+                var blocked:Boolean = false;
                 var placement:Object = findSidePlacement(
                     item, chosenSide, Number(item.slotY), avoidanceBounds,
                     occupied, width, height);
@@ -501,33 +428,72 @@ package wotstat.spottingpoints {
                     placement = findSidePlacement(
                         item, chosenSide, Number(item.slotY),
                         avoidanceBounds, occupied, width, height);
-                    if (placement != null) {
-                        item.state.side = chosenSide;
-                        item.state.pendingSide = null;
-                        item.state.pendingFrames = 0;
-                    }
                 }
                 if (placement == null) {
                     chosenSide = side;
                     placement = sidePlacement(
                         item, chosenSide, Number(item.slotY),
                         avoidanceBounds, width, height, true);
+                    blocked = true;
                 }
-                occupied.push(applyPlacement(
-                    item, placement, smoothingAlpha, occupied,
-                    avoidanceBounds));
+                appendPlannedPlacement(
+                    plan, item, placement, occupied,
+                    avoidanceBounds, blocked);
             }
         }
 
-        private function compareStableOrder(a:Object, b:Object):Number {
-            var difference:Number = Number(a.state.order) -
-                                    Number(b.state.order);
-            if (difference != 0) {
-                return difference;
+        private function appendPlannedPlacement(
+                plan:Object, item:Object, placement:Object,
+                occupied:Array, avoidanceBounds:Array,
+                blocked:Boolean):void {
+            var marker:SpotPointMarker = item.marker as SpotPointMarker;
+            var rect:Rectangle = placement.rect as Rectangle;
+            plan.placements.push({
+                "item": item,
+                "placement": placement
+            });
+            var cost:Number = placementCost(item, placement);
+            if (String(placement.placement) == "top") {
+                cost *= TOP_LEADER_WEIGHT;
             }
-            var aId:String = SpotPointMarker(a.marker).pointId;
-            var bId:String = SpotPointMarker(b.marker).pointId;
-            return aId < bId ? -1 : (aId == bId ? 0 : 1);
+            plan.score += cost;
+            if (blocked || isBlocked(rect, occupied, avoidanceBounds)) {
+                plan.score += BLOCKED_PLACEMENT_PENALTY;
+            }
+            plan.signature += "|" + marker.pointId + ":" +
+                              String(placement.placement);
+            occupied.push(rect);
+        }
+
+        private function placementCost(item:Object,
+                                       placement:Object):Number {
+            var rect:Rectangle = placement.rect as Rectangle;
+            var targetX:Number;
+            var targetY:Number;
+            if (String(placement.placement) == "left") {
+                targetX = rect.right;
+                targetY = rect.y + rect.height * 0.5;
+            } else if (String(placement.placement) == "right") {
+                targetX = rect.left;
+                targetY = rect.y + rect.height * 0.5;
+            } else {
+                targetX = clamp(Number(item.markerX), rect.left, rect.right);
+                targetY = rect.bottom;
+            }
+            var deltaX:Number = targetX - Number(item.markerX);
+            var deltaY:Number = targetY - Number(item.markerY);
+            return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        }
+
+        private function applyLayoutPlan(plan:Object):void {
+            for each (var entry:Object in plan.placements) {
+                var marker:SpotPointMarker = entry.item.marker as
+                    SpotPointMarker;
+                var placement:Object = entry.placement;
+                marker.layoutCallout(
+                    Number(placement.x), Number(placement.y),
+                    String(placement.placement));
+            }
         }
 
         private function findSidePlacement(
@@ -595,43 +561,6 @@ package wotstat.spottingpoints {
             };
         }
 
-        private function applyPlacement(
-                item:Object, placement:Object, smoothingAlpha:Number,
-                occupied:Array, avoidanceBounds:Array):Rectangle {
-            var marker:SpotPointMarker = item.marker as SpotPointMarker;
-            var state:Object = item.state;
-            var targetX:Number = Number(placement.x);
-            var targetY:Number = Number(placement.y);
-            if (!Boolean(state.initialized)) {
-                state.displayX = targetX;
-                state.displayY = targetY;
-                state.initialized = true;
-            } else {
-                if (Math.abs(targetX - Number(state.displayX)) >
-                        POSITION_DEADBAND) {
-                    state.displayX += (targetX - Number(state.displayX)) *
-                                      smoothingAlpha;
-                }
-                if (Math.abs(targetY - Number(state.displayY)) >
-                        POSITION_DEADBAND) {
-                    state.displayY += (targetY - Number(state.displayY)) *
-                                      smoothingAlpha;
-                }
-            }
-            var displayed:Rectangle = new Rectangle(
-                Number(state.displayX), Number(state.displayY),
-                marker.calloutWidth, marker.calloutHeight);
-            if (isBlocked(displayed, occupied, avoidanceBounds)) {
-                state.displayX = targetX;
-                state.displayY = targetY;
-                displayed.x = targetX;
-                displayed.y = targetY;
-            }
-            marker.layoutCallout(
-                displayed.x, displayed.y, String(placement.placement));
-            return displayed;
-        }
-
         private function isBlocked(rect:Rectangle, occupied:Array,
                                    avoidanceBounds:Array):Boolean {
             for each (var bounds:Rectangle in avoidanceBounds) {
@@ -659,12 +588,6 @@ package wotstat.spottingpoints {
             return Math.max(minimum, Math.min(maximum, value));
         }
 
-        private function resetLayoutState():void {
-            layoutStates = new Dictionary();
-            orderGroups = new Dictionary();
-            lastLayoutTime = 0;
-        }
-
         private function removeMarker(id:String):void {
             var marker:SpotPointMarker = markers[id] as SpotPointMarker;
             if (marker == null) {
@@ -673,7 +596,6 @@ package wotstat.spottingpoints {
             removeChild(marker);
             marker.dispose();
             delete markers[id];
-            delete layoutStates[id];
         }
 
         override protected function onBeforeDispose():void {
@@ -685,8 +607,6 @@ package wotstat.spottingpoints {
         override protected function onDispose():void {
             markers = null;
             layoutAnchors = null;
-            layoutStates = null;
-            orderGroups = null;
             super.onDispose();
         }
     }
