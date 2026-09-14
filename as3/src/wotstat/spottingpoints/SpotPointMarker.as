@@ -37,7 +37,7 @@ package wotstat.spottingpoints {
 
             connector = new Shape();
             connector.filters = [
-                new GlowFilter(0x000000, 0.85, 3, 3, 2, 1)
+                new GlowFilter(0x000000, 0.65, 8, 8, 1, 1)
             ];
             addChild(connector);
 
@@ -52,16 +52,10 @@ package wotstat.spottingpoints {
             dot.graphics.beginFill(0x22252A, 0.96);
             dot.graphics.drawCircle(0, 0, DOT_RADIUS);
             dot.graphics.endFill();
-            dot.filters = [
-                new GlowFilter(0x000000, 0.85, 3, 3, 2, 1)
-            ];
             addChild(dot);
 
             callout = new Sprite();
             calloutBackground = new Shape();
-            calloutBackground.filters = [
-                new GlowFilter(0x000000, 0.70, 4, 4, 1.25, 1)
-            ];
             callout.addChild(calloutBackground);
             labelField = new TextField();
             labelField.antiAliasType = AntiAliasType.ADVANCED;
