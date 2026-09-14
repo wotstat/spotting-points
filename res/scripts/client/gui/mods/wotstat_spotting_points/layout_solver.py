@@ -459,6 +459,7 @@ class CalloutLayoutSolver(object):
                                                   str(item['id'])))
         entries = []
         score = (0, 0.0, 0, 0.0, 0, 0.0, 0, 0, 0.0, 0.0)
+        conflictIds = set()
         sideSpanCache = {}
         obstacles = (geometry['hull'], geometry['turret'])
         for item in ordered:
@@ -482,16 +483,18 @@ class CalloutLayoutSolver(object):
             entry['_signature'] = self._candidateSignature(entry)
             score = _addScores(score, entry['_localScore'])
             for existing in entries:
+                pairScore = self._pairScore(existing, entry)
                 score = _addScores(
-                    score, self._expandPairScore(
-                        self._pairScore(existing, entry)))
+                    score, self._expandPairScore(pairScore))
+                if any(pairScore[position] for position in (0, 2, 4)):
+                    conflictIds.add(existing['id'])
+                    conflictIds.add(entry['id'])
             entries.append(entry)
         self.candidateCount = len(entries)
         previousScore = self._lastResult['score']
         worsened = self._stableScoreWorsened(score, previousScore)
-        reconsiderIds = set()
+        reconsiderIds = conflictIds
         if worsened:
-            reconsiderIds.update(self._conflictingIds(entries))
             if score[0]:
                 reconsiderIds.update(
                     entry['id'] for entry in entries

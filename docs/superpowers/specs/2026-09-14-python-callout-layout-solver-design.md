@@ -247,9 +247,9 @@ lane, so immediately switching back must beat the same penalty in the opposite
 direction. This creates a score hysteresis band without a timer.
 
 On changed input, the solver first rebuilds only those remembered candidates.
-If a higher-priority conflict count increases, it builds the complete candidate
-set only for the labels participating in that conflict and repairs them
-atomically. Without a new conflict, a label is reconsidered only after its
+It builds the complete candidate set for labels participating in any current
+pairwise conflict, including a conflict retained from the previous frame, and
+repairs them atomically. A conflict-free label is reconsidered only after its
 switch-neutral weighted leader length has grown by more than 64 pixels since
 its last evaluation. The stored baseline never includes the lane-switch
 penalty.

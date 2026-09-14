@@ -331,6 +331,31 @@ class LayoutSolverTests(unittest.TestCase):
         self.assertEqual(solver.stablePlanHits, 1)
         self.assertLessEqual(solver.candidateCount, 32)
 
+    def test_stable_plan_repairs_a_persistent_conflict(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        solver = CalloutLayoutSolver()
+        solver._signature = ('previous-frame',)
+        solver._lastResult = {
+            'score': [0, 0.0, 0, 0.0, 0, 0.0, 1, 0, 0.0, 0.0]
+        }
+        solver._lastLaneByPointId.update({'a': 'right', 'b': 'left'})
+        solver._lastChoiceByPointId.update({
+            'a': ('right', 1),
+            'b': ('left', 1)
+        })
+
+        result = solver.solve(
+            400.0, 300.0,
+            self._box(120.0, 90.0, 280.0, 210.0),
+            self._box(160.0, 60.0, 240.0, 140.0),
+            [self._item('a', 150.0, 80.0, 100.0),
+             self._item('b', 250.0, 80.5, 100.0)])
+
+        self.assertEqual(result['score'][2:7], [0, 0.0, 0, 0.0, 0])
+        self.assertEqual(solver.stablePlanHits, 1)
+        self.assertEqual(solver.fullSearches, 0)
+
     def test_lane_switch_does_not_raise_reconsideration_baseline(self):
         from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
 
