@@ -187,10 +187,12 @@ normalized to exact zero before tuple comparison. This prevents floating-point
 rounding residue from outranking a real conflict later in the tuple.
 
 The final `ordinaryCost` is total leader length, with top-leader length weighted
-by `TOP_LEADER_WEIGHT = 1.15`, plus `LANE_SWITCH_PENALTY = 180` for each lane
-change. Forbidden-polygon intrusion is therefore the cheapest exceptional
-compromise and competes with leader length only after all more serious counts
-and areas are equal.
+by `TOP_LEADER_WEIGHT = 1.15`, plus `BEND_PENALTY = 32` for each real direction
+change and `LANE_SWITCH_PENALTY = 72` for each lane change. Zero-length
+technical segments do not count as bends. Forbidden-polygon intrusion is
+therefore the cheapest exceptional compromise and competes with leader shape,
+lane stability, and length only after all more serious counts and areas are
+equal.
 
 When a candidate is added to a partial plan, pairwise scoring adds:
 
@@ -226,6 +228,11 @@ rather than an exhaustive product of candidates.
 - If the completed pass still contains a pairwise conflict, at most three repair
   passes reconsider only participating labels. Repair is capped at 192 pair
   scores.
+- After repair moves neighbouring labels, one monotonic polish pass reconsiders
+  remaining bent routes from the already-built candidate sets. It accepts only
+  a full lexicographic score improvement or an equal-score deterministic
+  signature tie-break, so the bend preference cannot reintroduce a more
+  important conflict. Straight routes are skipped.
 - The resulting complete plan is applied atomically.
 
 The domain has at most seven labels and at most fifteen raw candidates per

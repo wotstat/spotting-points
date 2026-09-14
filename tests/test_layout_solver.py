@@ -225,13 +225,90 @@ class LayoutSolverTests(unittest.TestCase):
                     'leader': [(0.0, 0.0), (20.0, 0.0)]}
         otherLane = {'lane': ('right' if selectedLane != 'right' else 'left'),
                      'leader': [(0.0, 0.0), (20.0, 0.0)]}
-        self.assertEqual(solver._ordinaryCost(items[0], otherLane)
-                         - solver._ordinaryCost(items[0], sameLane), 180.0)
+        self.assertGreater(solver._ordinaryCost(items[0], otherLane),
+                           solver._ordinaryCost(items[0], sameLane))
 
         solver.reset()
         afterReset = solver.solve(400.0, 300.0, hull, turret, items)
         self.assertEqual(afterReset['revision'], 1)
         self.assertIn('placements', afterReset)
+
+    def test_ordinary_cost_prefers_straight_responsive_routes(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        solver = CalloutLayoutSolver()
+        solver._lastLaneByPointId['front'] = 'left'
+        item = self._item('front', 0.0, 0.0)
+        straight = {'lane': 'left',
+                    'leader': [(0.0, 0.0), (200.0, 0.0)]}
+        bent = {'lane': 'left',
+                'leader': [(0.0, 0.0), (100.0, 0.0),
+                           (100.0, 100.0)]}
+        duplicatePoint = {'lane': 'left',
+                          'leader': [(0.0, 0.0), (0.0, 0.0),
+                                     (200.0, 0.0)]}
+        shorterOtherLane = {'lane': 'right',
+                            'leader': [(0.0, 0.0), (110.0, 0.0)]}
+
+        self.assertGreater(solver._ordinaryCost(item, bent),
+                           solver._ordinaryCost(item, straight))
+        self.assertEqual(solver._ordinaryCost(item, duplicatePoint),
+                         solver._ordinaryCost(item, straight))
+        self.assertLess(solver._ordinaryCost(item, shorterOtherLane),
+                        solver._ordinaryCost(item, straight))
+
+    def test_conflict_repair_repolishes_routes_after_labels_move(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        hull = [
+            (686.6051635742188, 576.7189331054688),
+            (668.887451171875, 505.180419921875),
+            (1163.9197998046875, 467.74365234375),
+            (1149.2247314453125, 536.6398315429688),
+            (659.4413452148438, 730.597412109375),
+            (633.9708862304688, 652.5147705078125),
+            (1263.89453125, 591.2153930664062),
+            (1237.7611083984375, 667.3097534179688)]
+        turret = [
+            (972.1363525390625, 451.4009704589844),
+            (975.1876220703125, 369.88922119140625),
+            (1143.564453125, 481.37554931640625),
+            (1124.9554443359375, 575.7683715820312),
+            (788.280029296875, 498.593017578125),
+            (776.64453125, 411.6543884277344),
+            (901.2666015625, 554.95263671875),
+            (904.1818237304688, 655.107666015625)]
+        items = [
+            self._item('front', 1198.0015869140625, 559.8545532226562,
+                       130.7),
+            self._item('gunMoving', 995.3472900390625, 557.4804077148438,
+                       183.8, part='turret'),
+            self._item('gunStatic', 1027.04345703125, 515.1535034179688,
+                       188.45, part='turret'),
+            self._item('left', 925.9006958007812, 464.2854919433594,
+                       162.45),
+            self._item('rear', 664.5592651367188, 608.4660034179688,
+                       118.2),
+            self._item('right', 965.4091186523438, 596.2081298828125,
+                       168.55),
+            self._item('top', 930.5712890625, 457.0800476074219,
+                       170.65)]
+        solver = CalloutLayoutSolver()
+        solver._lastLaneByPointId.update({
+            'front': 'top', 'gunMoving': 'left', 'gunStatic': 'top',
+            'left': 'left', 'rear': 'left', 'right': 'right',
+            'top': 'left'})
+
+        result = solver.solve(3257.0, 2055.0, hull, turret, items)
+
+        front = [placement for placement in result['placements']
+                 if placement['id'] == 'front'][0]
+        nonZeroSegments = [
+            (end[0] - start[0], end[1] - start[1])
+            for start, end in zip(front['leader'], front['leader'][1:])
+            if (abs(end[0] - start[0]) > 0.0001
+                or abs(end[1] - start[1]) > 0.0001)]
+        self.assertEqual(len(nonZeroSegments), 1)
 
     def test_stable_conflict_repairs_only_participating_labels(self):
         from wotstat_spotting_points.layout_solver import CalloutLayoutSolver

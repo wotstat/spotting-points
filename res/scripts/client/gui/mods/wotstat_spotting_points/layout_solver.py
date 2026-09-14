@@ -9,7 +9,8 @@ SCREEN_MARGIN = 8.0
 TOP_HORIZONTAL_GAP = 12.0
 POINT_CLEARANCE_RADIUS = 10.0
 TOP_LEADER_WEIGHT = 1.15
-LANE_SWITCH_PENALTY = 180.0
+BEND_PENALTY = 32.0
+LANE_SWITCH_PENALTY = 72.0
 RECONSIDER_DISTANCE_DELTA = 64.0
 MAX_REPAIR_PASSES = 3
 MAX_REPAIR_PAIR_SCORES = 192
@@ -277,6 +278,27 @@ def pointSegmentDistance(point, start, end):
 def _polylineLength(points):
     return sum(math.hypot(end[0] - start[0], end[1] - start[1])
                for start, end in zip(points, points[1:]))
+
+
+def _polylineBendCount(points):
+    previousDirection = None
+    bends = 0
+    for start, end in zip(points, points[1:]):
+        deltaX = end[0] - start[0]
+        deltaY = end[1] - start[1]
+        length = math.hypot(deltaX, deltaY)
+        if length <= EPSILON:
+            continue
+        direction = (deltaX / length, deltaY / length)
+        if previousDirection is not None:
+            cross = (previousDirection[0] * direction[1]
+                     - previousDirection[1] * direction[0])
+            dot = (previousDirection[0] * direction[0]
+                   + previousDirection[1] * direction[1])
+            if abs(cross) > EPSILON or dot < 1.0 - EPSILON:
+                bends += 1
+        previousDirection = direction
+    return bends
 
 
 def _pointPolylineDistance(point, polyline):
@@ -644,6 +666,41 @@ class CalloutLayoutSolver(object):
                     break
             if not improved or evaluations >= MAX_REPAIR_PAIR_SCORES:
                 break
+        return self._polishPlan({
+            'score': score,
+            'signature': ''.join(entry['_signature']
+                               for entry in entries),
+            'entries': entries
+        }, candidateSets)
+
+    def _polishPlan(self, plan, candidateSets):
+        entries = list(plan['entries'])
+        score = plan['score']
+        for index, current in enumerate(tuple(entries)):
+            candidates = candidateSets.get(current['id'])
+            currentBends = _polylineBendCount(current['leader'])
+            if candidates is None or not currentBends:
+                continue
+            straighterCandidates = [
+                candidate for candidate in candidates
+                if _polylineBendCount(candidate['leader']) < currentBends]
+            if not straighterCandidates:
+                continue
+            others = entries[:index] + entries[index + 1:]
+            removed = current['_localScore']
+            for other in others:
+                removed = _addScores(
+                    removed, self._expandPairScore(
+                        self._pairScore(current, other)))
+            baseScore = _subtractScores(score, removed)
+            bestEntry, bestScore = self._bestCandidate(
+                straighterCandidates, others, baseScore)
+            if (bestScore < score
+                    or (bestScore == score
+                        and bestEntry['_signature']
+                        < current['_signature'])):
+                entries[index] = bestEntry
+                score = bestScore
         return {'score': score,
                 'signature': ''.join(entry['_signature']
                                    for entry in entries),
@@ -691,7 +748,8 @@ class CalloutLayoutSolver(object):
                 self._ordinaryCost(item, candidate))
 
     def _ordinaryCost(self, item, candidate):
-        length = self._leaderCost(candidate)
+        length = (self._leaderCost(candidate)
+                  + _polylineBendCount(candidate['leader']) * BEND_PENALTY)
         remembered = self._lastLaneByPointId.get(str(item['id']))
         if remembered is not None and remembered != candidate['lane']:
             length += LANE_SWITCH_PENALTY

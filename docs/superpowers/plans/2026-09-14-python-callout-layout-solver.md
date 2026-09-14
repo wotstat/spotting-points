@@ -58,7 +58,7 @@ C:/Python27/python.exe -B tests/test_layout_solver.py
 
 - [x] **Step 4: Implement local scoring and bounded search**
 
-Precompute candidate-local overflow, forbidden-overlap, leader length, and lane-switch components. Select candidates in deterministic constrained order with early exit on a conflict-free candidate. If the complete pass still conflicts, run at most three repair passes for participating labels, capped at 192 pair scores.
+Precompute candidate-local overflow, forbidden-overlap, leader length, bend, and lane-switch components. Select candidates in deterministic constrained order with early exit on a conflict-free candidate. If the complete pass still conflicts, run at most three repair passes for participating labels, capped at 192 pair scores. After repair, make one monotonic pass over bent routes using only already-built straighter candidates.
 
 On a changed valid signature, update all remembered lanes and discrete candidate indices together and return the full result with a new revision. Rebuild the selected candidates on stable changed frames, then generate alternatives only for labels in a newly worsened conflict or whose leader cost grew by more than 64 pixels since its last evaluation. Reserve the all-label pass for initial layout, membership changes, and failed targeted repair. On an unchanged quarter-pixel signature, return only that revision. Remove lane/candidate/cost memory for absent ids.
 
