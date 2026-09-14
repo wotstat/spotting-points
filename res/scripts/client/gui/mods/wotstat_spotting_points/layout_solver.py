@@ -647,7 +647,9 @@ class CalloutLayoutSolver(object):
         overflowArea = max(
             0.0, rectangleArea
             - rectangleIntersectionArea(rectangle, safeRectangle))
-        overflowCount = 1 if overflowArea > EPSILON else 0
+        if overflowArea <= EPSILON:
+            overflowArea = 0.0
+        overflowCount = 1 if overflowArea else 0
         forbiddenCount = 0
         forbiddenArea = 0.0
         for part in ('hull', 'turret'):
@@ -693,7 +695,9 @@ class CalloutLayoutSolver(object):
             if distance < POINT_CLEARANCE_RADIUS - EPSILON)
         overlapArea = rectangleIntersectionArea(first['rect'],
                                                 second['rect'])
-        overlapCount = 1 if overlapArea > EPSILON else 0
+        if overlapArea <= EPSILON:
+            overlapArea = 0.0
+        overlapCount = 1 if overlapArea else 0
         crossingCount = 1 if _polylinesIntersect(
             first['leader'], second['leader']) else 0
         return (pointCount, pointPenetration,

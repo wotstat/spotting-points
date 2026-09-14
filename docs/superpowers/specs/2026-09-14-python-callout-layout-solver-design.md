@@ -178,6 +178,10 @@ before the total area or penetration. `leaderPointPenetration` is the sum of
 `POINT_CLEARANCE_RADIUS - segmentDistance`, with
 `POINT_CLEARANCE_RADIUS = 10`.
 
+Computed screen-overflow and label-overlap areas at or below `EPSILON` are
+normalized to exact zero before tuple comparison. This prevents floating-point
+rounding residue from outranking a real conflict later in the tuple.
+
 The final `ordinaryCost` is total leader length, with top-leader length weighted
 by `TOP_LEADER_WEIGHT = 1.15`, plus `LANE_SWITCH_PENALTY = 180` for each lane
 change. Forbidden-polygon intrusion is therefore the cheapest exceptional

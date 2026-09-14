@@ -122,6 +122,35 @@ class LayoutSolverTests(unittest.TestCase):
         self.assertLess(crossing, overlapping)
         self.assertLess(overlapping, throughPoint)
 
+    def test_sub_epsilon_area_noise_is_normalized_out_of_scores(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        solver = CalloutLayoutSolver()
+        geometry = {
+            'hull': {'bounds': (40.0, 40.0, 60.0, 60.0),
+                     'obstacle': self._box(40.0, 40.0, 60.0, 60.0)},
+            'turret': {'bounds': (140.0, 140.0, 160.0, 160.0),
+                       'obstacle': self._box(140.0, 140.0, 160.0, 160.0)}
+        }
+        item = self._item('front', 20.0, 20.0, 20.0, 10.0)
+        candidate = {
+            'lane': 'left',
+            'rect': (8.0 - 1.0e-9, 8.0, 20.0, 10.0),
+            'leader': [(20.0, 20.0), (8.0, 20.0)]
+        }
+        localScore = solver._candidateScore(
+            item, candidate, geometry, 200.0, 200.0)
+        pairScore = solver._pairScore(
+            {'point': (0.0, 30.0),
+             'rect': (0.0, 0.0, 20.0, 10.0),
+             'leader': [(0.0, 30.0), (0.0, 40.0)]},
+            {'point': (50.0, 30.0),
+             'rect': (20.0 - 1.0e-9, 0.0, 20.0, 10.0),
+             'leader': [(50.0, 30.0), (50.0, 40.0)]})
+
+        self.assertEqual(localScore[:2], (0, 0.0))
+        self.assertEqual(pairScore[2:4], (0, 0.0))
+
     def test_cache_lane_hysteresis_and_reset(self):
         from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
 
