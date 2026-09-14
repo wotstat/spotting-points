@@ -34,8 +34,8 @@ package wotstat.spottingpoints {
         override protected function onPopulate():void {
             super.onPopulate();
             window.useBottomBtns = false;
-            createHeading("group3d", LEFT, 14, 18);
-            createHeading("groupUi", RIGHT, 14, 18);
+            createHeading("group3d", LEFT, 14, 13);
+            createHeading("groupUi", RIGHT, 14, 13);
             createHeading("callouts", RIGHT, 81, 13);
             for (var index:int = 0; index < OPTION_NAMES.length; index++) {
                 var optionName:String = OPTION_NAMES[index];
@@ -51,9 +51,6 @@ package wotstat.spottingpoints {
                 addChild(box);
                 boxes[optionName] = box;
             }
-            graphics.lineStyle(1, 0x777777, 0.25);
-            graphics.moveTo(LEFT, 151);
-            graphics.lineTo(CONTENT_WIDTH - LEFT, 151);
             calloutMode = App.utils.classFactory.getComponent(
                 "DropdownMenuUI", DropdownMenu) as DropdownMenu;
             calloutMode.x = RIGHT;
@@ -80,6 +77,19 @@ package wotstat.spottingpoints {
             headings[key] = field;
         }
 
+        private function drawGroupFrame(left:int, heading:TextField):void {
+            var right:int = left + 260;
+            var top:int = 24;
+            var bottom:int = 148;
+            graphics.lineStyle(1, 0x77776B, 0.45);
+            graphics.moveTo(heading.x - 4, top);
+            graphics.lineTo(left, top);
+            graphics.lineTo(left, bottom);
+            graphics.lineTo(right, bottom);
+            graphics.lineTo(right, top);
+            graphics.lineTo(heading.x + heading.textWidth + 6, top);
+        }
+
         public function as_setData(options:Object, labels:Object,
                                    showDebugOption:Boolean):void {
             window.title = labels.title;
@@ -89,6 +99,9 @@ package wotstat.spottingpoints {
             for (var key:String in headings) {
                 headings[key].text = labels[key];
             }
+            graphics.clear();
+            drawGroupFrame(LEFT - 12, headings.group3d as TextField);
+            drawGroupFrame(RIGHT - 12, headings.groupUi as TextField);
             updating = true;
             calloutMode.dataProvider = new DataProvider(labels.calloutModes as Array);
             updating = false;
