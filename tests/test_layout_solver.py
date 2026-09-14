@@ -1,0 +1,141 @@
+import os
+import sys
+import unittest
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'res',
+                              'scripts', 'client', 'gui', 'mods'))
+
+
+class LayoutSolverTests(unittest.TestCase):
+    def _box(self, left, top, right, bottom):
+        return [(left, top), (right, top), (right, bottom), (left, bottom)]
+
+    def _item(self, pointId, x, y, width=64.0, height=24.0,
+              part='hull'):
+        return {'id': pointId, 'x': x, 'y': y, 'width': width,
+                'height': height, 'part': part}
+
+    def test_geometry_and_candidates_are_symmetric(self):
+        from wotstat_spotting_points.layout_solver import (
+            CalloutLayoutSolver, convexHull,
+            rectanglePolygonIntersectionArea)
+
+        square = [(40.0, 40.0), (80.0, 40.0),
+                  (80.0, 80.0), (40.0, 80.0)]
+        self.assertEqual(convexHull(square + square[:2]), square)
+        self.assertAlmostEqual(
+            rectanglePolygonIntersectionArea(
+                (60.0, 60.0, 30.0, 30.0), square),
+            400.0)
+
+        projected = [(130.0, 80.0), (170.0, 80.0),
+                     (170.0, 120.0), (130.0, 120.0)]
+        solver = CalloutLayoutSolver()
+        geometry = solver._buildGeometry(projected, projected)
+        candidates = solver._buildCandidates({
+            'id': 'front', 'x': 150.0, 'y': 100.0,
+            'width': 50.0, 'height': 24.0, 'part': 'hull'
+        }, geometry, 400.0, 300.0)
+
+        top = [candidate for candidate in candidates
+               if candidate['lane'] == 'top']
+        side = [candidate for candidate in candidates
+                if candidate['lane'] in ('left', 'right')]
+        verticalDirections = set(
+            cmp(candidate['leader'][-1][1], 100.0) for candidate in side)
+        self.assertEqual(len(top), 5)
+        self.assertEqual(verticalDirections, set((-1, 0, 1)))
+        for candidate in side:
+            leader = candidate['leader']
+            self.assertEqual(len(leader), 3)
+            self.assertAlmostEqual(abs(leader[1][0] - leader[0][0]),
+                                   abs(leader[1][1] - leader[0][1]))
+            self.assertAlmostEqual(leader[1][1], leader[2][1])
+
+    def test_solver_can_use_multiple_top_placements(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        result = CalloutLayoutSolver().solve(
+            640.0, 400.0,
+            self._box(80.0, 150.0, 560.0, 300.0),
+            self._box(220.0, 110.0, 420.0, 210.0),
+            [self._item('left', 180.0, 210.0),
+             self._item('top', 320.0, 140.0),
+             self._item('right', 460.0, 210.0)])
+
+        lanes = [placement['lane'] for placement in result['placements']]
+        self.assertGreaterEqual(lanes.count('top'), 2)
+        topRects = [placement['rect'] for placement in result['placements']
+                    if placement['lane'] == 'top']
+        self.assertEqual(len(topRects), len(set(tuple(rect)
+                                                for rect in topRects)))
+
+    def test_solver_returns_complete_plan_inside_forbidden_zone(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        items = [self._item('front', 145.0, 100.0, 100.0),
+                 self._item('rear', 155.0, 120.0, 100.0)]
+        result = CalloutLayoutSolver().solve(
+            300.0, 220.0, self._box(0.0, 0.0, 300.0, 220.0),
+            self._box(60.0, 40.0, 240.0, 180.0), items)
+
+        self.assertEqual(set(item['id'] for item in items),
+                         set(placement['id']
+                             for placement in result['placements']))
+        self.assertGreater(result['score'][7], 0)
+
+    def test_pair_cost_uses_strict_conflict_priority(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        solver = CalloutLayoutSolver()
+        crossing = solver._pairScore(
+            {'point': (10.0, 10.0), 'rect': (80.0, 80.0, 20.0, 10.0),
+             'leader': [(10.0, 10.0), (90.0, 70.0)]},
+            {'point': (10.0, 70.0), 'rect': (80.0, 0.0, 20.0, 10.0),
+             'leader': [(10.0, 70.0), (90.0, 10.0)]})
+        overlapping = solver._pairScore(
+            {'point': (10.0, 10.0), 'rect': (80.0, 80.0, 20.0, 10.0),
+             'leader': [(10.0, 10.0), (40.0, 40.0)]},
+            {'point': (10.0, 70.0), 'rect': (85.0, 84.0, 20.0, 10.0),
+             'leader': [(10.0, 70.0), (40.0, 50.0)]})
+        throughPoint = solver._pairScore(
+            {'point': (10.0, 10.0), 'rect': (80.0, 80.0, 20.0, 10.0),
+             'leader': [(10.0, 10.0), (90.0, 10.0)]},
+            {'point': (50.0, 10.0), 'rect': (80.0, 40.0, 20.0, 10.0),
+             'leader': [(50.0, 10.0), (90.0, 40.0)]})
+
+        self.assertEqual(crossing[4], 1)
+        self.assertEqual(overlapping[2], 1)
+        self.assertEqual(throughPoint[0], 1)
+        self.assertLess(crossing, overlapping)
+        self.assertLess(overlapping, throughPoint)
+
+    def test_cache_lane_hysteresis_and_reset(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        solver = CalloutLayoutSolver()
+        hull = self._box(120.0, 90.0, 280.0, 210.0)
+        turret = self._box(160.0, 60.0, 240.0, 140.0)
+        items = [self._item('front', 200.0, 180.0)]
+        first = solver.solve(400.0, 300.0, hull, turret, items)
+        cached = solver.solve(400.04, 300.04, hull, turret, items)
+
+        self.assertEqual(first['revision'], 1)
+        self.assertEqual(cached, {'revision': 1})
+        selectedLane = first['placements'][0]['lane']
+        sameLane = {'lane': selectedLane,
+                    'leader': [(0.0, 0.0), (20.0, 0.0)]}
+        otherLane = {'lane': ('right' if selectedLane != 'right' else 'left'),
+                     'leader': [(0.0, 0.0), (20.0, 0.0)]}
+        self.assertEqual(solver._ordinaryCost(items[0], otherLane)
+                         - solver._ordinaryCost(items[0], sameLane), 180.0)
+
+        solver.reset()
+        afterReset = solver.solve(400.0, 300.0, hull, turret, items)
+        self.assertEqual(afterReset['revision'], 1)
+        self.assertIn('placements', afterReset)
+
+
+if __name__ == '__main__':
+    unittest.main()
