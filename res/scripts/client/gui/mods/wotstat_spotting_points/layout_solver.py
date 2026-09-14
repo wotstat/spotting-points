@@ -321,6 +321,25 @@ def _pointList(points):
     return [(float(point[0]), float(point[1])) for point in points]
 
 
+def _octilinearLeader(start, target):
+    deltaX = target[0] - start[0]
+    deltaY = target[1] - start[1]
+    diagonalLength = min(abs(deltaX), abs(deltaY))
+    leader = [start]
+    if diagonalLength > EPSILON:
+        elbow = (
+            start[0] + (-diagonalLength if deltaX < 0.0
+                        else diagonalLength),
+            start[1] + (-diagonalLength if deltaY < 0.0
+                        else diagonalLength))
+        leader.append(elbow)
+    if (len(leader) == 1
+            or abs(leader[-1][0] - target[0]) > EPSILON
+            or abs(leader[-1][1] - target[1]) > EPSILON):
+        leader.append(target)
+    return leader
+
+
 class CalloutLayoutSolver(object):
     def __init__(self):
         self._revision = 0
@@ -856,14 +875,14 @@ class CalloutLayoutSolver(object):
             SCREEN_MARGIN,
             max(SCREEN_MARGIN,
                 height - SCREEN_MARGIN - calloutHeight))
-        targetX = _clamp(markerX, boxX, boxX + calloutWidth)
+        targetX = boxX + calloutWidth * 0.5
+        target = (targetX, boxY + calloutHeight)
         rectangle = (boxX, boxY, calloutWidth, calloutHeight)
         return {
             'lane': 'top',
             'offsetIndex': offsetIndex,
             'rect': rectangle,
-            'leader': [(markerX, markerY),
-                       (targetX, boxY + calloutHeight)]
+            'leader': _octilinearLeader((markerX, markerY), target)
         }
 
     def _horizontalSpan(self, part, minimumY, maximumY):

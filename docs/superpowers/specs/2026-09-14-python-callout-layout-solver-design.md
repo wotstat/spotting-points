@@ -144,8 +144,9 @@ Each candidate stores its finished screen-space polyline.
   with no such intersection is omitted. Symmetric candidate generation permits
   the diagonal to go either up or down; top candidates keep the domain nonempty
   if screen bounds eliminate every side candidate.
-- A top leader connects the marker to the closest point on the lower edge of
-  the top label.
+- A top leader terminates at the center of the label's lower edge. It consumes
+  the smaller screen-space delta with a diagonal segment at exactly 45 degrees,
+  then completes the remaining delta with one horizontal or vertical segment.
 
 `SpotPointMarker.as` receives and draws this returned polyline verbatim. It no
 longer independently reconstructs an elbow, preventing scoring and rendering

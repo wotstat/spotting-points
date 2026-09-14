@@ -82,6 +82,31 @@ class LayoutSolverTests(unittest.TestCase):
                                                 for rect in topRects)))
         self.assertLess(solver.pairScoreCalls, 250)
 
+    def test_top_leaders_are_octilinear_and_enter_bottom_center(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        projected = self._box(130.0, 80.0, 170.0, 120.0)
+        solver = CalloutLayoutSolver()
+        geometry = solver._buildGeometry(projected, projected)
+        candidates = solver._buildCandidates(
+            self._item('top', 150.0, 100.0, 50.0),
+            geometry, 500.0, 300.0)
+
+        topCandidates = [candidate for candidate in candidates
+                         if candidate['lane'] == 'top']
+        self.assertEqual(len(topCandidates), 5)
+        for candidate in topCandidates:
+            boxX, boxY, boxWidth, boxHeight = candidate['rect']
+            self.assertEqual(candidate['leader'][-1],
+                             (boxX + boxWidth * 0.5,
+                              boxY + boxHeight))
+            for start, end in zip(candidate['leader'],
+                                  candidate['leader'][1:]):
+                deltaX = abs(end[0] - start[0])
+                deltaY = abs(end[1] - start[1])
+                if deltaX > 0.0001 and deltaY > 0.0001:
+                    self.assertAlmostEqual(deltaX, deltaY)
+
     def test_solver_returns_complete_plan_inside_forbidden_zone(self):
         from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
 

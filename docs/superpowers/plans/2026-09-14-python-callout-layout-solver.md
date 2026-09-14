@@ -39,7 +39,7 @@ C:/Python27/python.exe -B tests/test_layout_solver.py LayoutSolverTests.test_geo
 
 - [x] **Step 2: Implement the minimal pure geometry and candidate model**
 
-Port monotonic-chain hull, octagonal convex inflation, horizontal/vertical spans, rectangle clipping/area, segment intersection, and point-to-segment distance. Generate `left`, `right`, and `top` candidates with quarter-pixel deduplication, screen clamping, exact 45-degree side elbows, and returned polylines.
+Port monotonic-chain hull, octagonal convex inflation, horizontal/vertical spans, rectangle clipping/area, segment intersection, and point-to-segment distance. Generate `left`, `right`, and `top` candidates with quarter-pixel deduplication, screen clamping, exact 45-degree side elbows, octilinear top leaders ending at the lower-edge center, and returned polylines.
 
 - [x] **Step 3: Add focused failing solver tests**
 
