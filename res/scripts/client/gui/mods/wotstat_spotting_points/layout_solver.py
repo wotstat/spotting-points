@@ -12,6 +12,7 @@ TOP_LEADER_WEIGHT = 1.15
 BEND_PENALTY = 32.0
 LANE_SWITCH_PENALTY = 72.0
 RECONSIDER_DISTANCE_DELTA = 64.0
+RECONSIDER_POSITION_DELTA = 16.0
 MAX_REPAIR_PASSES = 3
 MAX_REPAIR_PAIR_SCORES = 192
 
@@ -372,6 +373,7 @@ class CalloutLayoutSolver(object):
         self._lastLaneByPointId = {}
         self._lastChoiceByPointId = {}
         self._lastEvaluatedCostByPointId = {}
+        self._lastEvaluatedPointByPointId = {}
         self.lastChanged = False
         self.candidateCount = 0
         self.stablePlanHits = 0
@@ -388,6 +390,7 @@ class CalloutLayoutSolver(object):
         self._lastLaneByPointId.clear()
         self._lastChoiceByPointId.clear()
         self._lastEvaluatedCostByPointId.clear()
+        self._lastEvaluatedPointByPointId.clear()
         self.lastChanged = False
         self.candidateCount = 0
         self.stablePlanHits = 0
@@ -412,6 +415,9 @@ class CalloutLayoutSolver(object):
         for pointId in tuple(self._lastEvaluatedCostByPointId):
             if pointId not in currentIds:
                 del self._lastEvaluatedCostByPointId[pointId]
+        for pointId in tuple(self._lastEvaluatedPointByPointId):
+            if pointId not in currentIds:
+                del self._lastEvaluatedPointByPointId[pointId]
 
         plan = self._stablePlan(
             orderedItems, geometry, float(width), float(height))
@@ -433,6 +439,8 @@ class CalloutLayoutSolver(object):
             if entry['id'] in evaluatedIds:
                 self._lastEvaluatedCostByPointId[entry['id']] = (
                     self._leaderCost(entry))
+                self._lastEvaluatedPointByPointId[entry['id']] = (
+                    entry['point'])
         result = self._serializeResult(geometry, plan)
         self._lastResult = result
         return result
@@ -503,13 +511,21 @@ class CalloutLayoutSolver(object):
                 reconsiderIds.update(
                     entry['id'] for entry in entries
                     if entry['_localScore'][7])
-        if not reconsiderIds:
-            reconsiderIds.update(
-                entry['id'] for entry in entries
-                if self._leaderCost(entry)
-                > self._lastEvaluatedCostByPointId.get(
-                    entry['id'], self._leaderCost(entry))
-                + RECONSIDER_DISTANCE_DELTA)
+        for entry in entries:
+            pointId = entry['id']
+            evaluatedPoint = self._lastEvaluatedPointByPointId.get(pointId)
+            moved = evaluatedPoint is None
+            if evaluatedPoint is not None:
+                deltaX = entry['point'][0] - evaluatedPoint[0]
+                deltaY = entry['point'][1] - evaluatedPoint[1]
+                moved = (deltaX * deltaX + deltaY * deltaY
+                         >= RECONSIDER_POSITION_DELTA
+                         * RECONSIDER_POSITION_DELTA)
+            evaluatedCost = self._lastEvaluatedCostByPointId.get(
+                pointId, self._leaderCost(entry))
+            if (moved or self._leaderCost(entry)
+                    > evaluatedCost + RECONSIDER_DISTANCE_DELTA):
+                reconsiderIds.add(pointId)
         if reconsiderIds:
             candidateSets = {}
             itemById = dict((str(item['id']), item) for item in items)
@@ -535,7 +551,7 @@ class CalloutLayoutSolver(object):
                  'signature': ''.join(entry['_signature']
                                     for entry in entries),
                  'entries': entries},
-                candidateSets, reconsiderIds)
+                candidateSets, reconsiderIds, preserveEqual=True)
             score = plan['score']
             entries = plan['entries']
             worsened = self._stableScoreWorsened(score, previousScore)
@@ -610,7 +626,8 @@ class CalloutLayoutSolver(object):
                 break
         return bestEntry, bestScore
 
-    def _repairPlan(self, plan, candidateSets, reconsiderIds=None):
+    def _repairPlan(self, plan, candidateSets, reconsiderIds=None,
+                    preserveEqual=False):
         entries = list(plan['entries'])
         score = plan['score']
         evaluations = 0
@@ -653,7 +670,8 @@ class CalloutLayoutSolver(object):
                             candidate['_localScore'],
                             self._expandPairScore(pairScore)))
                     if (candidateScore < bestScore
-                            or (candidateScore == bestScore
+                            or (not preserveEqual
+                                and candidateScore == bestScore
                                 and candidate['_signature']
                                 < bestEntry['_signature'])):
                         bestEntry = candidate
@@ -674,9 +692,9 @@ class CalloutLayoutSolver(object):
             'signature': ''.join(entry['_signature']
                                for entry in entries),
             'entries': entries
-        }, candidateSets)
+        }, candidateSets, preserveEqual)
 
-    def _polishPlan(self, plan, candidateSets):
+    def _polishPlan(self, plan, candidateSets, preserveEqual=False):
         entries = list(plan['entries'])
         score = plan['score']
         for index, current in enumerate(tuple(entries)):
@@ -699,7 +717,8 @@ class CalloutLayoutSolver(object):
             bestEntry, bestScore = self._bestCandidate(
                 straighterCandidates, others, baseScore)
             if (bestScore < score
-                    or (bestScore == score
+                    or (not preserveEqual
+                        and bestScore == score
                         and bestEntry['_signature']
                         < current['_signature'])):
                 entries[index] = bestEntry

@@ -356,6 +356,78 @@ class LayoutSolverTests(unittest.TestCase):
         self.assertEqual(solver.stablePlanHits, 1)
         self.assertEqual(solver.fullSearches, 0)
 
+    def test_stable_plan_reconsiders_a_stale_route_after_anchor_motion(self):
+        from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
+
+        hull = [
+            (1099.2952880859375, 579.021240234375),
+            (1104.17333984375, 510.7127990722656),
+            (897.3971557617188, 654.2291259765625),
+            (899.0973510742188, 771.4622192382812),
+            (946.9279174804688, 557.9979248046875),
+            (947.3572387695312, 495.447509765625),
+            (659.1932983398438, 604.8953247070312),
+            (670.9761962890625, 706.3532104492188)]
+        turret = [
+            (1075.98876953125, 533.0747680664062),
+            (1081.1541748046875, 447.5212097167969),
+            (982.5321655273438, 486.0709533691406),
+            (980.1080322265625, 600.630615234375),
+            (906.3839111328125, 514.0140380859375),
+            (905.6148681640625, 436.8222351074219),
+            (763.6038208007812, 466.53741455078125),
+            (770.3551635742188, 566.6168823242188)]
+        items = [
+            self._item('front', 771.8685913085938, 683.1273193359375,
+                       130.7),
+            self._item('gunMoving', 892.2551879882812, 540.2261352539062,
+                       183.8, part='turret'),
+            self._item('left', 1033.168212890625, 535.3704223632812,
+                       162.45),
+            self._item('rear', 1020.7282104492188, 535.8056030273438,
+                       118.2),
+            self._item('right', 840.9553833007812, 512.9290771484375,
+                       168.55),
+            self._item('top', 936.3602905273438, 456.0960388183594,
+                       170.65)]
+        solver = CalloutLayoutSolver()
+        solver._signature = ('previous-frame',)
+        solver._lastResult = {
+            'score': [0, 0.0, 0, 0.0, 0, 0.0, 0, 0, 0.0,
+                      955.165601086635]
+        }
+        solver._lastLaneByPointId.update({
+            'front': 'left', 'gunMoving': 'left', 'left': 'right',
+            'rear': 'left', 'right': 'left', 'top': 'left'})
+        solver._lastChoiceByPointId.update({
+            'front': ('left', 0), 'gunMoving': ('left', 0),
+            'left': ('right', 0), 'rear': ('left', 3),
+            'right': ('left', 0), 'top': ('left', 3)})
+        solver._lastEvaluatedCostByPointId.update({
+            'front': 140.08587305438323,
+            'gunMoving': 166.02436914103487,
+            'left': 110.06711404287853,
+            'rear': 319.9948877478823,
+            'right': 113.75653180774952,
+            'top': 79.19595949289332})
+        solver._lastEvaluatedPointByPointId = dict(
+            (item['id'], (item['x'], item['y'])) for item in items)
+        solver._lastEvaluatedPointByPointId['rear'] = (
+            items[3]['x'] - 17.0, items[3]['y'])
+
+        result = solver.solve(1920.0, 1080.0, hull, turret, items)
+
+        rear = [placement for placement in result['placements']
+                if placement['id'] == 'rear'][0]
+        leaderLength = sum(
+            ((end[0] - start[0]) ** 2.0
+             + (end[1] - start[1]) ** 2.0) ** 0.5
+            for start, end in zip(rear['leader'], rear['leader'][1:]))
+        self.assertEqual(result['score'][2:7], [0, 0.0, 0, 0.0, 0])
+        self.assertEqual(rear['lane'], 'top')
+        self.assertLess(leaderLength, 200.0)
+        self.assertEqual(solver.fullSearches, 0)
+
     def test_lane_switch_does_not_raise_reconsideration_baseline(self):
         from wotstat_spotting_points.layout_solver import CalloutLayoutSolver
 
