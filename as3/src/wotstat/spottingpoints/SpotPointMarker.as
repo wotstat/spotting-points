@@ -45,6 +45,7 @@ package wotstat.spottingpoints {
             ring.graphics.lineStyle(1.5, 0xFFF2B2, 0.72);
             if (isObservationPoint) {
                 ring.graphics.drawRect(-6, -6, 12, 12);
+                ring.rotation = 45;
             } else {
                 ring.graphics.drawCircle(0, 0, DOT_RADIUS + 2);
             }
@@ -86,6 +87,7 @@ package wotstat.spottingpoints {
 
         public function updatePulse(now:Number):void {
             var phase:Number = now % (PULSE_DELAY + PULSE_DURATION);
+            ring.visible = phase >= PULSE_DELAY;
             var progress:Number = Math.max(0, (phase - PULSE_DELAY) / PULSE_DURATION);
             ring.alpha = 0.72 * (1 - progress);
             ring.scaleX = ring.scaleY = 1 + 1.6 * progress;
