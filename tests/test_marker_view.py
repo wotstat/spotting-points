@@ -147,7 +147,7 @@ def _loadMarkerViewModule(currentRealm='RU'):
     _module('frameworks')
     _module('frameworks.wulf', WindowLayer=Bag(
         FULLSCREEN_WINDOW=1, OVERLAY=2, SUB_VIEW=3,
-        TOP_SUB_VIEW=4, MARKER=5))
+        TOP_SUB_VIEW=4, MARKER=5, WINDOW=6))
     _module('gui')
     _module('gui.Scaleform')
     _module('gui.Scaleform.daapi')
@@ -183,6 +183,12 @@ def _loadMarkerViewModule(currentRealm='RU'):
 
 
 class MarkerViewTests(unittest.TestCase):
+    def test_marker_overlay_uses_multi_view_window_layer(self):
+        markerView, _ = _loadMarkerViewModule()
+
+        self.assertEqual(markerView.VIEW_LAYER,
+                         sys.modules['frameworks.wulf'].WindowLayer.WINDOW)
+
     def test_layout_bridge_cache_stats_and_reset(self):
         markerView, _ = _loadMarkerViewModule()
         flash = FakeFlash()

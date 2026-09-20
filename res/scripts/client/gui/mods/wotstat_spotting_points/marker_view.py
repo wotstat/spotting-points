@@ -24,6 +24,7 @@ from .callout_transition import CalloutTransitions
 
 VIEW_ALIAS = 'wotstatSpottingPointsMarkerOverlay'
 VIEW_SWF = 'wotstatSpottingPointsMarkers.swf'
+VIEW_LAYER = WindowLayer.WINDOW
 
 log = logging.getLogger('WOTSTAT_SPOTTING_POINTS')
 
@@ -124,7 +125,7 @@ def registerMarkerView():
     if _registered:
         return
     g_entitiesFactories.addSettings(ViewSettings(
-        VIEW_ALIAS, MarkerOverlayView, VIEW_SWF, WindowLayer.MARKER, None,
+        VIEW_ALIAS, MarkerOverlayView, VIEW_SWF, VIEW_LAYER, None,
         ScopeTemplates.DEFAULT_SCOPE))
     _registered = True
 
