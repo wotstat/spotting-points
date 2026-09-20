@@ -30,7 +30,6 @@ class DisplayOptions(object):
                 or self.showUiPoints or self.showGuides)
 
     def drawInterval(self, hasHover):
-        if (self.showMaskPoints or self.showSpotPoints or self.showGuides
-                or hasHover):
+        if self.showMaskPoints or self.showSpotPoints or self.showGuides:
             return 0.0
         return UI_FRAME_INTERVAL if self.showUiPoints else 0.0

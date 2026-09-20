@@ -49,7 +49,7 @@ class DisplayOptionsTests(unittest.TestCase):
         options.showUiPoints = True
 
         self.assertAlmostEqual(options.drawInterval(False), 1.0 / 30.0)
-        self.assertEqual(options.drawInterval(True), 0.0)
+        self.assertAlmostEqual(options.drawInterval(True), 1.0 / 30.0)
         options.showMaskPoints = True
         self.assertEqual(options.drawInterval(False), 0.0)
 

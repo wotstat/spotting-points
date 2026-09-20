@@ -1,24 +1,16 @@
 # -*- coding: utf-8 -*-
 from collections import namedtuple
 
+from .localization import getMarkerLabels
+
 MarkerData = namedtuple('MarkerData', 'id point label')
 
 BODY_POINT_IDS = ('rear', 'front', 'left', 'right')
 SPECIAL_POINT_IDS = ('gunStatic', 'top', 'gunMoving')
 
-LABELS = {
-    'rear': u'Задняя габаритная',
-    'front': u'Передняя габаритная',
-    'left': u'Левая бортовая габаритная',
-    'right': u'Правая бортовая габаритная',
-    'gunStatic': u'Исходная орудийная габаритная',
-    'top': u'Верхняя обзорно-габаритная',
-    'gunMoving': u'Орудийная обзорно-габаритная',
-}
 
-
-def isOverlaySceneActive(hasHangar, hasBlockingWindow):
-    return bool(hasHangar and not hasBlockingWindow)
+def isOverlaySceneActive(hasVehicleScene, hasBlockingWindow):
+    return bool(hasVehicleScene and not hasBlockingWindow)
 
 
 def _pointsEqual(a, b):
@@ -27,7 +19,8 @@ def _pointsEqual(a, b):
     return sum((a[i] - b[i]) ** 2 for i in range(3)) < 0.000001
 
 
-def buildMarkerData(maskPoints, spotPoints):
+def buildMarkerData(maskPoints, spotPoints, language=None):
+    labels = getMarkerLabels(language)
     pointsById = {
         'rear': maskPoints[0],
         'front': maskPoints[1],
@@ -42,7 +35,7 @@ def buildMarkerData(maskPoints, spotPoints):
         if (pointId == 'gunStatic'
                 and _pointsEqual(pointsById[pointId], pointsById['gunMoving'])):
             continue
-        result.append(MarkerData(pointId, pointsById[pointId], LABELS[pointId]))
+        result.append(MarkerData(pointId, pointsById[pointId], labels[pointId]))
     return result
 
 

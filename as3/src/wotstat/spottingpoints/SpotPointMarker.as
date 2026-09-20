@@ -13,6 +13,7 @@ package wotstat.spottingpoints {
         private static const DOT_RADIUS:Number = 4;
         private static const CALLOUT_HEIGHT:Number = 24;
         private static const CALLOUT_PADDING:Number = 8;
+        private static const CALLOUT_TEXT_Y:Number = 1;
         private static const PULSE_DURATION:Number = 850;
         private static const PULSE_DELAY:Number = 1750;
 
@@ -66,6 +67,8 @@ package wotstat.spottingpoints {
             addChild(dot);
 
             callout = new Sprite();
+            // Keep it measurable for layout, but hidden until positioned.
+            callout.alpha = 0;
             calloutBackground = new Shape();
             callout.addChild(calloutBackground);
             labelField = new TextField();
@@ -76,7 +79,7 @@ package wotstat.spottingpoints {
             labelField.mouseEnabled = false;
             labelField.selectable = false;
             labelField.x = CALLOUT_PADDING;
-            labelField.y = 3;
+            labelField.y = CALLOUT_TEXT_Y;
             callout.addChild(labelField);
             addChild(callout);
             setLabel(label);
@@ -144,6 +147,7 @@ package wotstat.spottingpoints {
                 parent.localToGlobal(new Point(boxX, boxY)));
             callout.x = localBox.x;
             callout.y = localBox.y;
+            callout.alpha = 1;
 
             connector.graphics.clear();
             if (leader == null || leader.length < 2) {

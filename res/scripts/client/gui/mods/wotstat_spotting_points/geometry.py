@@ -7,8 +7,10 @@ import math
 from collections import namedtuple
 
 LineGeometry = namedtuple('LineGeometry', 'points color backColor')
+HighlightGroup = namedtuple('HighlightGroup', 'faded bright')
 LayoutBounds = namedtuple('LayoutBounds', 'hull turret')
 TURRET_ARC_STEP = math.radians(5.0)
+TURRET_CIRCLE_STEP = math.radians(10.0)
 
 
 def addMovingGunPoint(maskPoints, spotPoints, point):
@@ -47,6 +49,25 @@ def buildTurretArc(axisPoint, staticPoint, movingPoint):
                        axisPoint[2] + math.cos(angle) * radius))
     points[0] = tuple(staticPoint[i] for i in range(3))
     points[-1] = tuple(movingPoint[i] for i in range(3))
+    return points
+
+
+def buildTurretCircle(axisPoint, staticPoint):
+    offsetX = staticPoint[0] - axisPoint[0]
+    offsetZ = staticPoint[2] - axisPoint[2]
+    radius = math.hypot(offsetX, offsetZ)
+    if radius < 0.000001:
+        return []
+    startAngle = math.atan2(offsetX, offsetZ)
+    segmentCount = int(math.ceil(2.0 * math.pi / TURRET_CIRCLE_STEP))
+    points = []
+    for index in range(segmentCount + 1):
+        angle = startAngle + 2.0 * math.pi * index / segmentCount
+        points.append((axisPoint[0] + math.sin(angle) * radius,
+                       staticPoint[1],
+                       axisPoint[2] + math.cos(angle) * radius))
+    points[0] = tuple(staticPoint[i] for i in range(3))
+    points[-1] = points[0]
     return points
 
 
@@ -130,7 +151,7 @@ def _faceLine(line, points):
     return LineGeometry(points, line.color, line.backColor)
 
 
-def buildHighlightGroups(lines):
+def buildHighlightGroups(lines, movingArc=None, gunCircle=None):
     leftFace = _faceLine(lines[1], list(lines[1].points[:5]))
     rightFace = _faceLine(
         lines[2], list(lines[2].points) + [lines[2].points[0]])
@@ -150,12 +171,16 @@ def buildHighlightGroups(lines):
     leftAxis = _faceLine(axis, [axisCenter, axis.points[0]])
     rightAxis = _faceLine(axis, [axisCenter, axis.points[1]])
     groups = {
-        'rear': [rearFace] + rearCross,
-        'front': [frontFace] + frontCross,
-        'left': [leftFace] + leftCross + [lines[7], leftAxis],
-        'right': [rightFace] + rightCross + [rightAxis, lines[9]],
-        'gunStatic': [lines[8]],
-        'top': [lines[0]],
-        'gunMoving': [lines[8]] + list(lines[13:]),
+        'rear': HighlightGroup([], [rearFace] + rearCross),
+        'front': HighlightGroup([], [frontFace] + frontCross),
+        'left': HighlightGroup([leftFace] + leftCross,
+                               [lines[7], leftAxis]),
+        'right': HighlightGroup([rightFace] + rightCross,
+                                [rightAxis, lines[9]]),
+        'gunStatic': HighlightGroup([], [lines[8]]),
+        'top': HighlightGroup([lines[0]], [lines[10]]),
+        'gunMoving': HighlightGroup(
+            [gunCircle] if gunCircle is not None else [],
+            [movingArc] if movingArc is not None else []),
     }
     return groups

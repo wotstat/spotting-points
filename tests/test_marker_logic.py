@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'res',
 
 
 class MarkerLogicTests(unittest.TestCase):
-    def test_overlay_is_active_only_with_hangar_and_no_covering_view(self):
+    def test_overlay_is_active_only_with_vehicle_scene_and_no_covering_view(self):
         from wotstat_spotting_points.marker_logic import isOverlaySceneActive
 
         self.assertTrue(isOverlaySceneActive(True, False))
@@ -24,7 +24,7 @@ class MarkerLogicTests(unittest.TestCase):
         ]
         spots = [(0, 3, 0), (0, 2, 1)]
 
-        markers = buildMarkerData(mask, spots)
+        markers = buildMarkerData(mask, spots, 'ru')
 
         self.assertEqual([marker.id for marker in markers],
                          ['rear', 'front', 'left', 'right',
@@ -40,7 +40,7 @@ class MarkerLogicTests(unittest.TestCase):
         ]
         spots = [(0, 3, 0), (1, 2, 1)]
 
-        markers = buildMarkerData(mask, spots)
+        markers = buildMarkerData(mask, spots, 'ru')
 
         self.assertEqual([marker.id for marker in markers],
                          ['rear', 'front', 'left', 'right', 'gunStatic',

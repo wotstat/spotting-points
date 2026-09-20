@@ -38,6 +38,26 @@ _BASE_WINDOW_CLASSES = set(('MainWindow', 'HangarWindow'))
 if CURRENT_REALM == 'RU':
     _BASE_WINDOW_CLASSES.add('PopOverWindow')
 
+_STYLE_PREVIEW_ALIAS_NAMES = set((
+    'STYLE_PREVIEW', 'STYLE_PROGRESSION_PREVIEW',
+    'STYLE_BUYING_PREVIEW', 'SHOWCASE_STYLE_BUYING_PREVIEW'))
+_VEHICLE_SCENE_ALIASES = set((
+    GAME_VIEW_ALIAS.LOBBY_HANGAR, GAME_VIEW_ALIAS.LOBBY_CUSTOMIZATION))
+for _aliasName in dir(GAME_VIEW_ALIAS):
+    if (_aliasName.endswith('VEHICLE_PREVIEW')
+            or _aliasName in _STYLE_PREVIEW_ALIAS_NAMES
+            or _aliasName == 'VEHICLE_HUB'):
+        _VEHICLE_SCENE_ALIASES.add(getattr(GAME_VIEW_ALIAS, _aliasName))
+_VEHICLE_SCENE_CONTENT_CLASSES = set((
+    'CustomizationMainView', 'VehicleHubMainView'))
+
+try:
+    from gui.impl.gen import R
+    _CUSTOMIZATION_LAYOUT_ID = (
+        R.views.lobby.customization.CustomizationMainView())
+except (AttributeError, ImportError):
+    _CUSTOMIZATION_LAYOUT_ID = None
+
 
 def _getWindowAlias(window):
     try:
@@ -46,8 +66,20 @@ def _getWindowAlias(window):
         return getattr(getattr(window, 'content', None), 'alias', None)
 
 
-def _isBaseHangarWindow(window):
-    return (_getWindowAlias(window) == GAME_VIEW_ALIAS.LOBBY_HANGAR
+def _isVehicleSceneWindow(window):
+    if _getWindowAlias(window) in _VEHICLE_SCENE_ALIASES:
+        return True
+    content = getattr(window, 'content', None)
+    return (content is not None
+            and (_CUSTOMIZATION_LAYOUT_ID is not None
+                 and getattr(content, 'layoutID', None)
+                 == _CUSTOMIZATION_LAYOUT_ID
+                 or content.__class__.__name__
+                 in _VEHICLE_SCENE_CONTENT_CLASSES))
+
+
+def _isBaseLobbyWindow(window):
+    return (_isVehicleSceneWindow(window)
             or window.__class__.__name__ in _BASE_WINDOW_CLASSES)
 
 
@@ -147,6 +179,7 @@ class MarkerOverlayView(View):
         self._sceneActive = False
         self._nativeMarkers = {}
         self._layoutMarkers = {}
+        self._hoverMarkers = {}
         self._initializeLayoutSolver()
 
     def _initializeLayoutSolver(self):
@@ -222,7 +255,7 @@ class MarkerOverlayView(View):
         self._controller.attachMarkerView(self)
 
     def updateMarkers(self, markers, vehicle, hoveredPointId,
-                      layoutBounds=None):
+                      layoutBounds=None, highlightGroup=None):
         if not self._ready:
             return
         if layoutBounds is not None:
@@ -247,6 +280,7 @@ class MarkerOverlayView(View):
         for pointId in tuple(self._nativeMarkers):
             if pointId not in seen:
                 self._removeMarker(pointId)
+        self._updateHoverGeometry(vehicle, highlightGroup)
         self.flashObject.as_updateMarkers(
             buildOverlayData(markers), hoveredPointId)
 
@@ -263,6 +297,58 @@ class MarkerOverlayView(View):
                 flashMarker, _createPartMarkerProvider(point, partProvider))
             nativeMarker.markerSetActive(self._sceneActive)
             self._layoutMarkers[anchorId] = nativeMarker
+
+    def _updateHoverGeometry(self, vehicle, highlightGroup):
+        points = []
+        pointIds = {}
+        payload = []
+        if highlightGroup is not None:
+            for style, lines in (('faded', highlightGroup.faded),
+                                 ('bright', highlightGroup.bright)):
+                for line in lines:
+                    ids = []
+                    for point in line.points:
+                        key = tuple(round(float(point[index]), 6)
+                                    for index in range(3))
+                        anchorId = pointIds.get(key)
+                        if anchorId is None:
+                            anchorId = 'hover%d' % len(points)
+                            pointIds[key] = anchorId
+                            points.append(point)
+                        ids.append(anchorId)
+                    if len(ids) >= 2:
+                        payload.append({'style': style, 'points': ids})
+
+        if points:
+            inverseVehicleMatrix = Matrix(vehicle.matrix)
+            inverseVehicleMatrix.invert()
+            for index, point in enumerate(points):
+                anchorId = 'hover%d' % index
+                localPoint = inverseVehicleMatrix.applyPoint(point)
+                localKey = tuple(round(float(localPoint[axis]), 6)
+                                 for axis in range(3))
+                entry = self._hoverMarkers.get(anchorId)
+                if entry is None:
+                    flashMarker = self.flashObject.as_createHoverAnchor(anchorId)
+                    provider = _createPartMarkerProvider(
+                        localPoint, vehicle.matrix)
+                    nativeMarker = _createNativeMarker()
+                    nativeMarker.setMarker(flashMarker, provider)
+                    nativeMarker.markerSetActive(self._sceneActive)
+                    self._hoverMarkers[anchorId] = (
+                        nativeMarker, provider, localKey)
+                elif entry[2] != localKey:
+                    provider = entry[1]
+                    localMatrix = Matrix()
+                    localMatrix.setTranslate(localPoint)
+                    provider.a = localMatrix
+                    provider.b = vehicle.matrix
+                    self._hoverMarkers[anchorId] = (
+                        entry[0], provider, localKey)
+        for anchorId in tuple(self._hoverMarkers):
+            if int(anchorId[5:]) >= len(points):
+                self._removeHoverMarker(anchorId)
+        self.flashObject.as_setHoverGeometry(payload)
 
     def updateSceneActive(self):
         return self._ready and self._sceneActive
@@ -284,18 +370,21 @@ class MarkerOverlayView(View):
         if self._windowsManager is None:
             return
         windows = self._windowsManager.findWindows(lambda window: True)
-        hasHangar = any(_getWindowAlias(window) ==
-                        GAME_VIEW_ALIAS.LOBBY_HANGAR for window in windows)
+        hasVehicleScene = any(
+            _isVehicleSceneWindow(window) for window in windows)
         hasBlockingWindow = any(
             window.layer in _RESTRICTED_LAYERS
-            and not _isBaseHangarWindow(window) for window in windows)
-        active = isOverlaySceneActive(hasHangar, hasBlockingWindow)
+            and not _isBaseLobbyWindow(window) for window in windows)
+        active = isOverlaySceneActive(
+            hasVehicleScene, hasBlockingWindow)
         if self._sceneActive != active:
             self._sceneActive = active
             self.flashObject.as_setActive(active)
             for marker in self._nativeMarkers.values():
                 marker.markerSetActive(active)
             for marker in self._layoutMarkers.values():
+                marker.markerSetActive(active)
+            for marker, provider, localKey in self._hoverMarkers.values():
                 marker.markerSetActive(active)
 
     def hitTest(self, cursorX, cursorY):
@@ -314,6 +403,8 @@ class MarkerOverlayView(View):
         for anchorId in tuple(self._layoutMarkers):
             marker = self._layoutMarkers.pop(anchorId)
             marker.markerSetActive(False)
+        for anchorId in tuple(self._hoverMarkers):
+            self._removeHoverMarker(anchorId)
         self.flashObject.as_clearMarkers()
 
     def _removeMarker(self, pointId):
@@ -321,6 +412,12 @@ class MarkerOverlayView(View):
         if marker is not None:
             marker.markerSetActive(False)
         self.flashObject.as_removeMarker(pointId)
+
+    def _removeHoverMarker(self, anchorId):
+        entry = self._hoverMarkers.pop(anchorId, None)
+        if entry is not None:
+            entry[0].markerSetActive(False)
+        self.flashObject.as_removeHoverAnchor(anchorId)
 
     def _dispose(self):
         global _view, _loading
@@ -335,6 +432,7 @@ class MarkerOverlayView(View):
         self._sceneActive = False
         self._nativeMarkers = None
         self._layoutMarkers = None
+        self._hoverMarkers = None
         self._layoutSolver = None
         if _view is self:
             _view = None
@@ -377,6 +475,11 @@ def _convertLayoutPayload(payload):
         raise ValueError('Expected positive viewport')
     hull = _convertPoints(_readField(payload, 'hull'))
     turret = _convertPoints(_readField(payload, 'turret'))
+    # Native markers start at the same position until their first projection.
+    # Do not seed solver hysteresis or transitions with that placeholder frame.
+    for corners in (hull, turret):
+        if len(set(corners)) < 3:
+            raise ValueError('Waiting for native marker projection')
     values = _readField(payload, 'items')
     items = []
     seen = set()

@@ -19,7 +19,7 @@
 проверка состояния и изображения в игре → сохранение изменений в Git.
 
 ```powershell
-./build.ps1 -Version 0.3.17 -Python C:/Python27/python.exe
+./build.ps1 -Version 0.3.18 -Python C:/Python27/python.exe
 C:/Python27/python.exe -B -m unittest discover -s tests
 ```
 
@@ -140,7 +140,8 @@ reload; тестовые изменения настроек восстанав�
 
 Параметры компилятора смотри в `build.ps1`: SWF target, player 17,
 `as3/libs` и `playerglobal.swc` как external-library-path, корректный `JAVA_HOME`.
-Для маркеров скопируй также `LayoutDebugOverlay.as`, от которого зависит overlay.
+Для маркеров скопируй и переименуй вместе со ссылками также
+`LayoutDebugOverlay.as` и `HoverGeometryOverlay.as`, от которых зависит overlay.
 
 В этом клиенте `res_mods/1.45.0.0` имеет `cacheSubdirs="true"`: новые файлы,
 добавленные после запуска в ранее отсутствовавшую папку, не обнаруживались.

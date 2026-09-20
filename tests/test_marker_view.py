@@ -82,6 +82,9 @@ class FakeFlash(object):
     def __init__(self):
         self.created = []
         self.layoutCreated = []
+        self.hoverCreated = []
+        self.hoverRemoved = []
+        self.hoverGeometry = []
         self.updated = []
         self.removed = []
         self.cleared = 0
@@ -98,6 +101,17 @@ class FakeFlash(object):
         marker = object()
         self.layoutCreated.append((anchorId, marker))
         return marker
+
+    def as_createHoverAnchor(self, anchorId):
+        marker = object()
+        self.hoverCreated.append((anchorId, marker))
+        return marker
+
+    def as_removeHoverAnchor(self, anchorId):
+        self.hoverRemoved.append(anchorId)
+
+    def as_setHoverGeometry(self, geometry):
+        self.hoverGeometry.append(geometry)
 
     def as_removeMarker(self, pointId):
         self.removed.append(pointId)
@@ -139,7 +153,11 @@ def _loadMarkerViewModule(currentRealm='RU'):
     _module('gui.Scaleform.daapi')
     _module('gui.Scaleform.daapi.settings')
     _module('gui.Scaleform.daapi.settings.views', VIEW_ALIAS=Bag(
-        LOBBY_HANGAR='hangar'))
+        LOBBY_HANGAR='hangar', LOBBY_CUSTOMIZATION='customization',
+        VEHICLE_HUB='vehicleHub',
+        VEHICLE_PREVIEW='vehiclePreviewPage',
+        HERO_VEHICLE_PREVIEW='heroVehiclePreviewPage',
+        STYLE_PREVIEW='vehicleStylePreview'))
     _module('gui.Scaleform.framework', ScopeTemplates=Bag(DEFAULT_SCOPE=None),
             ViewSettings=object, g_entitiesFactories=object())
     _module('gui.Scaleform.framework.entities')
@@ -147,6 +165,9 @@ def _loadMarkerViewModule(currentRealm='RU'):
             ViewKey=object)
     _module('gui.Scaleform.framework.managers')
     _module('gui.Scaleform.framework.managers.loaders', SFViewLoadParams=object)
+    _module('gui.impl')
+    _module('gui.impl.gen', R=Bag(views=Bag(lobby=Bag(customization=Bag(
+        CustomizationMainView=lambda: 301)))))
     _module('helpers', dependency=Bag(instance=lambda cls: None))
     _module('skeletons')
     _module('skeletons.gui')
@@ -170,6 +191,7 @@ class MarkerViewTests(unittest.TestCase):
         view._controller = None
         view._nativeMarkers = {}
         view._layoutMarkers = {}
+        view._hoverMarkers = {}
         view.flashObject = flash
         view._initializeLayoutSolver()
 
@@ -186,6 +208,11 @@ class MarkerViewTests(unittest.TestCase):
                 id='front', x=200.0, y=180.0,
                 width=64.0, height=24.0, part='hull')]))
 
+        pending = Bag(width=400.0, height=300.0,
+                      hull=box(0, 0, 0, 0), turret=box(0, 0, 0, 0),
+                      items=payload.items)
+        self.assertNotIn('placements', view.solveLayout(pending))
+        self.assertFalse(view._layoutTransitions._targets)
         first = view.solveLayout(payload)
         cached = view.solveLayout(payload)
         stats = view.getLayoutPerformanceStats()
@@ -255,6 +282,7 @@ class MarkerViewTests(unittest.TestCase):
         view._sceneActive = True
         view._nativeMarkers = {}
         view._layoutMarkers = {}
+        view._hoverMarkers = {}
         view.flashObject = flash
         layoutBounds = LayoutBounds(
             [(-2, 0, -3), (-2, 2, -3), (-2, 2, 3), (-2, 0, 3),
@@ -294,6 +322,7 @@ class MarkerViewTests(unittest.TestCase):
         view._sceneActive = True
         view._nativeMarkers = {}
         view._layoutMarkers = {}
+        view._hoverMarkers = {}
         view.flashObject = flash
         markers = [
             MarkerData('front', (15.0, 0.0, 20.0), u'Передняя'),
@@ -322,14 +351,107 @@ class MarkerViewTests(unittest.TestCase):
         self.assertEqual(nativeMarkers[0].active[-1], False)
         self.assertEqual(flash.removed, ['front'])
 
+    def test_hover_geometry_reuses_vertices_and_updates_projection_providers(self):
+        markerView, nativeMarkers = _loadMarkerViewModule()
+        from wotstat_spotting_points.geometry import (
+            HighlightGroup, LineGeometry)
+        flash = FakeFlash()
+        vehicleMatrix = FakeMatrix()
+        vehicleMatrix.translation = (10.0, 0.0, 20.0)
+        vehicle = Bag(matrix=vehicleMatrix, model=Bag(node=lambda name: None))
+        view = object.__new__(markerView.MarkerOverlayView)
+        view._ready = True
+        view._sceneActive = True
+        view._nativeMarkers = {}
+        view._layoutMarkers = {}
+        view._hoverMarkers = {}
+        view.flashObject = flash
+        group = HighlightGroup(
+            [LineGeometry([(10.0, 1.0, 20.0), (12.0, 1.0, 20.0)],
+                          0, None)],
+            [LineGeometry([(12.0, 1.0, 20.0), (12.0, 3.0, 25.0)],
+                          0, None)])
+
+        try:
+            view.updateMarkers([], vehicle, None, None, group)
+        except TypeError as error:
+            self.fail('hover geometry bridge is missing: %s' % error)
+
+        self.assertEqual(len(nativeMarkers), 3)
+        self.assertEqual([item[0] for item in flash.hoverCreated],
+                         ['hover0', 'hover1', 'hover2'])
+        self.assertEqual(flash.hoverGeometry[-1], [
+            {'style': 'faded', 'points': ['hover0', 'hover1']},
+            {'style': 'bright', 'points': ['hover1', 'hover2']},
+        ])
+        projected = [marker.provider.applyToOrigin()
+                     for marker in nativeMarkers]
+        self.assertEqual(projected, [(10.0, 1.0, 20.0),
+                                     (12.0, 1.0, 20.0),
+                                     (12.0, 3.0, 25.0)])
+        providerMatrices = [marker.provider.a for marker in nativeMarkers]
+
+        view.updateMarkers([], vehicle, None, None, group)
+
+        self.assertEqual([marker.provider.a for marker in nativeMarkers],
+                         providerMatrices)
+
+        moved = HighlightGroup([], [LineGeometry(
+            [(11.0, 2.0, 21.0), (13.0, 2.0, 22.0)], 0, None)])
+        view.updateMarkers([], vehicle, None, None, moved)
+
+        self.assertEqual(len(nativeMarkers), 3)
+        self.assertEqual(nativeMarkers[0].provider.applyToOrigin(),
+                         (11.0, 2.0, 21.0))
+        self.assertEqual(nativeMarkers[1].provider.applyToOrigin(),
+                         (13.0, 2.0, 22.0))
+        self.assertEqual(nativeMarkers[2].active[-1], False)
+        self.assertEqual(flash.hoverRemoved, ['hover2'])
+
+    def test_vehicle_scene_windows_include_customization_and_previews(self):
+        markerView, _ = _loadMarkerViewModule()
+
+        def scaleformWindow(alias):
+            return Bag(loadParams=Bag(viewKey=Bag(alias=alias)))
+
+        self.assertTrue(markerView._isVehicleSceneWindow(
+            scaleformWindow('hangar')))
+        self.assertTrue(markerView._isVehicleSceneWindow(
+            scaleformWindow('customization')))
+        self.assertTrue(markerView._isVehicleSceneWindow(
+            scaleformWindow('vehiclePreviewPage')))
+        self.assertTrue(markerView._isVehicleSceneWindow(
+            scaleformWindow('heroVehiclePreviewPage')))
+        self.assertTrue(markerView._isVehicleSceneWindow(
+            scaleformWindow('vehicleStylePreview')))
+        self.assertTrue(markerView._isVehicleSceneWindow(
+            scaleformWindow('vehicleHub')))
+        self.assertFalse(markerView._isVehicleSceneWindow(
+            scaleformWindow('profile')))
+
+    def test_wulf_vehicle_hub_window_is_a_vehicle_scene(self):
+        markerView, _ = _loadMarkerViewModule('EU')
+        vehicleHubView = type('VehicleHubMainView', (object,), {})()
+        vehicleHub = Bag(content=vehicleHubView)
+
+        self.assertTrue(markerView._isVehicleSceneWindow(vehicleHub))
+        self.assertTrue(markerView._isBaseLobbyWindow(vehicleHub))
+
+    def test_ru_wulf_customization_window_is_a_vehicle_scene(self):
+        markerView, _ = _loadMarkerViewModule('RU')
+        customization = Bag(content=Bag(layoutID=301))
+
+        self.assertTrue(markerView._isVehicleSceneWindow(customization))
+        self.assertTrue(markerView._isBaseLobbyWindow(customization))
+
     def test_popover_blocks_overlay_only_in_wot_eu(self):
         popover = type('PopOverWindow', (object,), {})()
 
         markerView, _ = _loadMarkerViewModule('RU')
-        self.assertTrue(markerView._isBaseHangarWindow(popover))
+        self.assertTrue(markerView._isBaseLobbyWindow(popover))
 
         markerView, _ = _loadMarkerViewModule('EU')
-        self.assertFalse(markerView._isBaseHangarWindow(popover))
+        self.assertFalse(markerView._isBaseLobbyWindow(popover))
 
 
 if __name__ == '__main__':

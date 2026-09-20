@@ -37,6 +37,7 @@ class FakeMarkerView(object):
         self.hit = hit
         self.hitCalls = 0
         self.layoutDebug = []
+        self.updates = []
 
     def clearMarkers(self):
         self.clears += 1
@@ -47,6 +48,12 @@ class FakeMarkerView(object):
 
     def setLayoutDebug(self, value):
         self.layoutDebug.append(value)
+
+    def updateSceneActive(self):
+        return True
+
+    def updateMarkers(self, *args):
+        self.updates.append(args)
 
 
 def _module(name, **attributes):
@@ -85,7 +92,8 @@ def _loadControllerModule():
             drawVehicle=lambda vehicle, *args: ('geometry',),
             drawGeometry=lambda geometry, *args: None,
             getLayoutBounds=lambda vehicle: None,
-            getWorldGeometry=lambda vehicle, includeLines=True: ('geometry',))
+            getWorldGeometry=lambda vehicle, includeLines=True,
+            includeGunCircle=False: ('geometry',))
     _module('wotstat_spotting_points.turret_control',
             TurretMouseControl=object)
     sys.modules.pop('wotstat_spotting_points.controller', None)
@@ -123,7 +131,7 @@ class ControllerLifecycleTests(unittest.TestCase):
         controller = self.makeController(FakeSelectableVehicle())
         controller.options.showUiPoints = True
         original = self.controllerModule.getWorldGeometry
-        self.controllerModule.getWorldGeometry = lambda vehicle, lines: None
+        self.controllerModule.getWorldGeometry = lambda *args: None
         try:
             controller._draw()
         finally:
@@ -149,13 +157,72 @@ class ControllerLifecycleTests(unittest.TestCase):
         self.assertTrue(controller.options.showSpotPoints)
         self.assertTrue(controller.options.showGuides)
 
-    def test_hover_is_skipped_outside_the_active_3d_scene(self):
+    def test_ui_hover_is_not_blocked_by_the_hangar_3d_scene_gate(self):
         controller = self.makeController(cursorOverScene=False)
 
         controller._updateMarkerHover(True)
 
+        self.assertEqual(controller._hoveredPointId, 'front')
+        self.assertEqual(controller._markerView.hitCalls, 1)
+
+    def test_hover_is_skipped_when_the_marker_scene_is_inactive(self):
+        controller = self.makeController(cursorOverScene=False)
+
+        controller._updateMarkerHover(False)
+
         self.assertIsNone(controller._hoveredPointId)
         self.assertEqual(controller._markerView.hitCalls, 0)
+
+    def test_active_hover_geometry_is_forwarded_to_the_ui_overlay(self):
+        vehicle = FakeSelectableVehicle()
+        controller = self.makeController(vehicle)
+        highlight = Bag(faded=['face'], bright=['guide'])
+        maskPoints = [(index, 0, 0) for index in range(7)]
+        spotPoints = [maskPoints[5], maskPoints[6]]
+        geometry = (maskPoints, spotPoints, [], {'front': highlight})
+
+        try:
+            controller._updateMarkerView(vehicle, geometry)
+        except ValueError as error:
+            self.fail('world geometry has no UI highlight channel: %s' % error)
+
+        self.assertEqual(len(controller._markerView.updates), 1)
+        self.assertIs(controller._markerView.updates[0][-1], highlight)
+
+    def test_full_gun_circle_is_requested_only_for_moving_gun_hover(self):
+        vehicle = FakeSelectableVehicle()
+        controller = self.makeController(vehicle)
+        controller.options.showUiPoints = True
+        controller._hoveredPointId = 'gunMoving'
+        calls = []
+        original = self.controllerModule.getWorldGeometry
+        self.controllerModule.getWorldGeometry = (
+            lambda *args: calls.append(args) or ('geometry',))
+        controller._updateMarkerView = lambda *args: None
+        try:
+            controller._draw()
+        finally:
+            self.controllerModule.getWorldGeometry = original
+
+        self.assertEqual(calls, [(vehicle, True, True)])
+
+    def test_ui_hover_waits_for_marker_gate_before_building_guides(self):
+        vehicle = FakeSelectableVehicle()
+        controller = self.makeController(vehicle)
+        controller.options.showUiPoints = True
+        controller._hoveredPointId = 'gunMoving'
+        controller._nextMarkerUpdate = 1.0
+        calls = []
+        original = self.controllerModule.getWorldGeometry
+        self.controllerModule.getWorldGeometry = (
+            lambda *args: calls.append(args) or ('geometry',))
+        try:
+            controller._draw()
+        finally:
+            self.controllerModule.getWorldGeometry = original
+
+        self.assertEqual(calls, [(vehicle, False, False)])
+        self.assertAlmostEqual(self.callbacks[-1], 1.0 / 30.0)
 
     def test_layout_debug_option_updates_the_attached_overlay(self):
         controller = self.makeController()

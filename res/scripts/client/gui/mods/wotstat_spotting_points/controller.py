@@ -111,18 +111,23 @@ class SpottingPointsController(object):
             if (isinstance(vehicle, ClientSelectableCameraVehicle)
                     and vehicle.isVehicleLoaded and vehicle.appearance is not None
                     and vehicle.typeDescriptor is not None):
-                needLines = (self.options.showGuides
-                             or self._hoveredPointId is not None)
-                geometry = getWorldGeometry(vehicle, needLines)
+                now = BigWorld.time()
+                updateUi = (self.options.showUiPoints
+                            and self._markerView is not None
+                            and now >= self._nextMarkerUpdate)
+                needHighlight = (updateUi
+                                 and self._hoveredPointId is not None)
+                needLines = self.options.showGuides or needHighlight
+                geometry = getWorldGeometry(
+                    vehicle, needLines,
+                    needHighlight
+                    and self._hoveredPointId == 'gunMoving')
                 if geometry is not None:
                     drawGeometry(
                         geometry, self.options.showMaskPoints,
                         self.options.showSpotPoints, self.options.showGuides,
                         self._hoveredPointId)
-                    now = BigWorld.time()
-                    if (self.options.showUiPoints
-                            and self._markerView is not None
-                            and now >= self._nextMarkerUpdate):
+                    if updateUi:
                         self._nextMarkerUpdate = now + 1.0 / 30.0
                         try:
                             self._updateMarkerView(vehicle, geometry)
@@ -161,20 +166,19 @@ class SpottingPointsController(object):
         if geometry is None:
             self._markerView.clearMarkers()
             return
-        maskPoints, spotPoints, _ = geometry
+        maskPoints, spotPoints, _, highlightGroups = geometry
         markers = buildMarkerData(maskPoints, spotPoints)
         layoutBounds = getLayoutBounds(vehicle)
         active = self._markerView.updateSceneActive()
         if active:
             self._markerView.updateMarkers(
-                markers, vehicle, self._hoveredPointId, layoutBounds)
+                markers, vehicle, self._hoveredPointId, layoutBounds,
+                highlightGroups.get(self._hoveredPointId))
         self._updateMarkerHover(active)
 
     def _updateMarkerHover(self, markerSceneActive):
         cursor = GUI.mcursor()
-        if (not markerSceneActive or not cursor.inWindow or not cursor.inFocus
-                or not self._hangar.isCursorOver3DScene
-                or not getattr(self._hangar, 'isSelectionEnabled', True)):
+        if not markerSceneActive or not cursor.inWindow or not cursor.inFocus:
             self._hoveredPointId = None
             return
         position = cursor.position

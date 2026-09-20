@@ -10,22 +10,10 @@ from gui.Scaleform.framework.managers.loaders import SFViewLoadParams
 from helpers import dependency
 from skeletons.gui.app_loader import IAppLoader
 
+from .localization import getSettingsLabels
+
 VIEW_ALIAS = 'wotstatSpottingPointsSettings'
 VIEW_SWF = 'wotstatSpottingPointsSettings.swf'
-
-LABELS = {
-    'title': 'Габаритные и обзорные точки',
-    'showMaskPoints': 'Габаритные точки',
-    'showSpotPoints': 'Обзорные точки',
-    'showUiPoints': 'Отображать маркеры',
-    'showGuides': 'Направляющие',
-    'group3d': '3D',
-    'groupUi': 'UI',
-    'callouts': 'Сноски',
-    'calloutModes': ['Не отображать', 'Вариант А', 'Вариант Б'],
-    'allowTurretRotation': 'Разрешить вращение башни мышью',
-    'layoutDebug': 'Отладочная отрисовка зон размещения',
-}
 
 _controller = None
 _window = None
@@ -101,7 +89,8 @@ class SettingsWindow(AbstractWindowView):
             self.destroy()
             return
         self.flashObject.as_setData(
-            self._controller.getOptions(), LABELS, self._showDebugOption)
+            self._controller.getOptions(), getSettingsLabels(),
+            self._showDebugOption)
 
     def optionChanged(self, name, value):
         if self._controller is not None:

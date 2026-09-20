@@ -2,6 +2,7 @@
 import logging
 
 from .controller import SpottingPointsController
+from .localization import getModListLabels
 from .marker_view import registerMarkerView, unregisterMarkerView
 from .settings_view import registerSettingsView, showSettings, unregisterSettingsView
 
@@ -24,13 +25,14 @@ def init(version):
     settingsRegistered = False
     markerRegistered = False
     try:
+        labels = getModListLabels()
         registerMarkerView()
         markerRegistered = True
         registerSettingsView()
         settingsRegistered = True
         g_modsListApi.addModification(
-            id=MOD_ID, name='Настройки габаритных и обзорных точек',
-            description='Открыть окно настроек точек, направляющих и башни',
+            id=MOD_ID, name=labels['name'],
+            description=labels['description'],
             icon='', enabled=True, login=False, lobby=True,
             callback=lambda: showSettings(instance))
     except Exception:

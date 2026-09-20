@@ -12,7 +12,10 @@ package wotstat.spottingpoints {
 
         private var markers:Dictionary = new Dictionary();
         private var layoutAnchors:Dictionary = new Dictionary();
+        private var hoverAnchors:Dictionary = new Dictionary();
         private var debugOverlay:LayoutDebugOverlay;
+        private var hoverOverlay:HoverGeometryOverlay;
+        private var hoverGeometry:Array = [];
         private var layoutDebug:Boolean = false;
         private var active:Boolean = true;
         private var calloutsEnabled:Boolean = true;
@@ -31,6 +34,8 @@ package wotstat.spottingpoints {
             debugOverlay = new LayoutDebugOverlay();
             debugOverlay.visible = false;
             addChildAt(debugOverlay, 0);
+            hoverOverlay = new HoverGeometryOverlay();
+            addChildAt(hoverOverlay, 1);
             addEventListener(Event.ENTER_FRAME, onEnterFrame);
         }
 
@@ -49,7 +54,8 @@ package wotstat.spottingpoints {
             markers[id] = marker;
             addChild(marker);
             if (!marker.isObservationPoint) {
-                setChildIndex(marker, debugOverlay != null ? 1 : 0);
+                setChildIndex(marker, hoverOverlay != null ? 2 :
+                    (debugOverlay != null ? 1 : 0));
             }
             return marker;
         }
@@ -66,6 +72,36 @@ package wotstat.spottingpoints {
             layoutAnchors[id] = anchor;
             addChild(anchor);
             return anchor;
+        }
+
+        public function as_createHoverAnchor(id:String):DisplayObject {
+            var existing:DisplayObject = hoverAnchors[id] as DisplayObject;
+            if (existing != null) {
+                return existing;
+            }
+            var anchor:Sprite = new Sprite();
+            anchor.alpha = 0;
+            anchor.mouseEnabled = false;
+            anchor.mouseChildren = false;
+            hoverAnchors[id] = anchor;
+            addChild(anchor);
+            return anchor;
+        }
+
+        public function as_removeHoverAnchor(id:String):void {
+            var anchor:DisplayObject = hoverAnchors[id] as DisplayObject;
+            if (anchor == null) {
+                return;
+            }
+            removeChild(anchor);
+            delete hoverAnchors[id];
+        }
+
+        public function as_setHoverGeometry(value:Array):void {
+            hoverGeometry = value != null ? value : [];
+            if (hoverGeometry.length == 0 && hoverOverlay != null) {
+                hoverOverlay.clear();
+            }
         }
 
         public function as_updateMarkers(data:Array,
@@ -132,10 +168,18 @@ package wotstat.spottingpoints {
                 removeChild(layoutAnchors[key] as DisplayObject);
                 delete layoutAnchors[key];
             }
+            for (key in hoverAnchors) {
+                removeChild(hoverAnchors[key] as DisplayObject);
+                delete hoverAnchors[key];
+            }
+            hoverGeometry = [];
             lastLayoutRevision = -1;
             lastLayoutResult = null;
             if (debugOverlay != null) {
                 debugOverlay.clear();
+            }
+            if (hoverOverlay != null) {
+                hoverOverlay.clear();
             }
         }
 
@@ -148,6 +192,10 @@ package wotstat.spottingpoints {
                 var now:Number = getTimer();
                 for each (var marker:SpotPointMarker in markers) {
                     marker.updatePulse(now);
+                }
+                if (hoverOverlay != null && hoverGeometry != null &&
+                        hoverGeometry.length > 0) {
+                    hoverOverlay.render(hoverGeometry, hoverAnchors);
                 }
                 layoutCallouts();
             }
@@ -293,7 +341,10 @@ package wotstat.spottingpoints {
         override protected function onDispose():void {
             markers = null;
             layoutAnchors = null;
+            hoverAnchors = null;
             debugOverlay = null;
+            hoverOverlay = null;
+            hoverGeometry = null;
             solveLayout = null;
             super.onDispose();
         }
