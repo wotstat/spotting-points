@@ -24,22 +24,39 @@ class LocalizationTests(unittest.TestCase):
         self.assertEqual(set(self.localization._TRANSLATIONS), expected)
         for language in expected:
             self.assertEqual(
-                len(self.localization._TRANSLATIONS[language]),
-                len(self.localization._KEYS))
+                set(self.localization._TRANSLATIONS[language]),
+                set(self.localization._KEYS))
             modList = self.localization.getModListLabels(language)
             settings = self.localization.getSettingsLabels(language)
             markers = self.localization.getMarkerLabels(language)
+            tooltips = self.localization.getMarkerTooltips(language)
             self.assertEqual(set(modList), set(('name', 'description')))
-            self.assertEqual(len(settings), 11)
+            self.assertEqual(len(settings), 12)
             self.assertEqual(len(settings['calloutModes']), 3)
             self.assertEqual(len(markers), 7)
             self.assertTrue(all(modList.values()))
             self.assertTrue(all(settings.values()))
             self.assertTrue(all(markers.values()))
+            self.assertEqual(set(tooltips), set(markers) | {'combinedGun'})
+            self.assertTrue(all(tooltip['title'] and tooltip['body']
+                                for tooltip in tooltips.values()))
+
+    def test_russian_combined_gun_tooltip_preserves_paragraphs(self):
+        tooltip = self.localization.getMarkerTooltips('ru')['combinedGun']
+        self.assertEqual(tooltip['title'],
+                         u'Исходная орудийная габаритная и орудийная '
+                         u'обзорно-габаритная')
+        self.assertEqual(len(tooltip['body'].split(u'\n\n')), 4)
 
     def test_russian_mod_list_name_is_short(self):
         labels = self.localization.getModListLabels('ru')
         self.assertEqual(labels['name'], u'Габаритные точки')
+
+    def test_tooltip_option_has_localized_label(self):
+        self.assertEqual(self.localization.getSettingsLabels('ru')['showTooltips'],
+                         u'Отображать подсказки')
+        self.assertEqual(self.localization.getSettingsLabels('en')['showTooltips'],
+                         u'Show tooltips')
 
     def test_point_terminology_matches_game_usage(self):
         expected = {

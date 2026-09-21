@@ -365,6 +365,10 @@ class MarkerOverlayView(View):
         if self._ready:
             self.flashObject.as_setCalloutsEnabled(mode != 0)
 
+    def setTooltipsEnabled(self, value):
+        if self._ready:
+            self.flashObject.as_setTooltipsEnabled(bool(value))
+
     def _onWindowStatusChanged(self, uniqueId, status):
         self._refreshSceneActive()
 
@@ -422,6 +426,10 @@ class MarkerOverlayView(View):
             return None
         pointId = self.flashObject.as_hitTest(cursorX, cursorY)
         return str(pointId) if pointId is not None else None
+
+    def clearTooltipHover(self):
+        if self._ready:
+            self.flashObject.as_hideTooltip()
 
     def clearMarkers(self):
         if not self._ready:

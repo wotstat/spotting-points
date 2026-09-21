@@ -36,7 +36,10 @@ class FakeMarkerView(object):
         self.clears = 0
         self.hit = hit
         self.hitCalls = 0
+        self.tooltipClears = 0
         self.layoutDebug = []
+        self.calloutModes = []
+        self.tooltipsEnabled = []
         self.updates = []
 
     def clearMarkers(self):
@@ -46,8 +49,17 @@ class FakeMarkerView(object):
         self.hitCalls += 1
         return self.hit
 
+    def clearTooltipHover(self):
+        self.tooltipClears += 1
+
     def setLayoutDebug(self, value):
         self.layoutDebug.append(value)
+
+    def setCalloutMode(self, value):
+        self.calloutModes.append(value)
+
+    def setTooltipsEnabled(self, value):
+        self.tooltipsEnabled.append(value)
 
     def updateSceneActive(self):
         return True
@@ -172,6 +184,19 @@ class ControllerLifecycleTests(unittest.TestCase):
 
         self.assertIsNone(controller._hoveredPointId)
         self.assertEqual(controller._markerView.hitCalls, 0)
+        self.assertEqual(controller._markerView.tooltipClears, 1)
+
+    def test_tooltip_option_is_applied_to_active_and_new_views(self):
+        controller = self.makeController()
+        view = controller._markerView
+
+        self.assertTrue(controller.setOption('showTooltips', False))
+        self.assertEqual(view.tooltipsEnabled, [False])
+        self.assertEqual(controller._hoveredPointId, 'front')
+
+        controller.attachMarkerView(view)
+        self.assertEqual(view.calloutModes, [0])
+        self.assertEqual(view.tooltipsEnabled, [False, False])
 
     def test_active_hover_geometry_is_forwarded_to_the_ui_overlay(self):
         vehicle = FakeSelectableVehicle()

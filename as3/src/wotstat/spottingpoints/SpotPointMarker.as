@@ -29,6 +29,8 @@ package wotstat.spottingpoints {
         private var hovered:Boolean = false;
         private var calloutsEnabled:Boolean = true;
         private var currentLabel:String = "";
+        public var tooltipTitle:String = "";
+        public var tooltipBody:String = "";
 
         public function SpotPointMarker(id:String, label:String) {
             super();
@@ -96,9 +98,12 @@ package wotstat.spottingpoints {
             ring.scaleX = ring.scaleY = 1 + 1.6 * progress;
         }
 
-        public function setData(label:String, showCallout:Boolean):void {
+        public function setData(label:String, showCallout:Boolean,
+                                title:String, body:String):void {
             setLabel(label);
             persistentCallout = showCallout;
+            tooltipTitle = title;
+            tooltipBody = body;
             updateCalloutVisibility();
         }
 
@@ -141,6 +146,17 @@ package wotstat.spottingpoints {
                 localX, localY);
         }
 
+        public function hitTestTooltip(parentX:Number, parentY:Number):Boolean {
+            var localPoint:Point = globalToLocal(
+                parent.localToGlobal(new Point(parentX, parentY)));
+            if (calloutsEnabled) {
+                return callout.visible && callout.alpha > 0 &&
+                    callout.getBounds(this).contains(localPoint.x, localPoint.y);
+            }
+            return localPoint.x * localPoint.x +
+                localPoint.y * localPoint.y <= 100;
+        }
+
         public function layoutCallout(boxX:Number, boxY:Number,
                                       leader:Array):void {
             var localBox:Point = globalToLocal(
@@ -171,6 +187,8 @@ package wotstat.spottingpoints {
         public function dispose():void {
             pointId = null;
             currentLabel = null;
+            tooltipTitle = null;
+            tooltipBody = null;
             labelField = null;
             calloutBackground = null;
             callout = null;

@@ -48,6 +48,8 @@ class SpottingPointsController(object):
             self._markerView.setLayoutDebug(self.options.layoutDebug)
         elif name == 'calloutMode' and self._markerView is not None:
             self._markerView.setCalloutMode(self.options.calloutMode)
+        elif name == 'showTooltips' and self._markerView is not None:
+            self._markerView.setTooltipsEnabled(self.options.showTooltips)
         if self.options.hasVisuals():
             self._start()
         else:
@@ -86,6 +88,7 @@ class SpottingPointsController(object):
         self._markerView = view
         view.setLayoutDebug(self.options.layoutDebug)
         view.setCalloutMode(self.options.calloutMode)
+        view.setTooltipsEnabled(self.options.showTooltips)
 
     def detachMarkerView(self, view):
         if self._markerView is view:
@@ -180,6 +183,8 @@ class SpottingPointsController(object):
         cursor = GUI.mcursor()
         if not markerSceneActive or not cursor.inWindow or not cursor.inFocus:
             self._hoveredPointId = None
+            if self._markerView is not None:
+                self._markerView.clearTooltipHover()
             return
         position = cursor.position
         self._hoveredPointId = self._markerView.hitTest(

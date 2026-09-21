@@ -55,13 +55,28 @@ class MarkerLogicTests(unittest.TestCase):
             MarkerData('left', (0, 0, 0), u'Левая'),
         ]
 
-        payload = buildOverlayData(markers)
+        payload = buildOverlayData(markers, 'ru')
 
-        self.assertEqual(payload, [
-            {'id': 'front', 'label': u'Передняя', 'showLabel': True},
-            {'id': 'rear', 'label': u'Задняя', 'showLabel': True},
-            {'id': 'left', 'label': u'Левая', 'showLabel': True},
-        ])
+        self.assertEqual([item['id'] for item in payload],
+                         ['front', 'rear', 'left'])
+        self.assertTrue(all(item['showLabel'] for item in payload))
+        self.assertEqual(payload[0]['tooltipTitle'],
+                         u'Передняя габаритная')
+        self.assertIn(u'передней грани', payload[0]['tooltipBody'])
+
+    def test_merged_gun_point_uses_separate_tooltip_copy(self):
+        from wotstat_spotting_points.marker_logic import (
+            buildOverlayData, MarkerData)
+
+        merged = buildOverlayData([
+            MarkerData('gunMoving', (0, 0, 0), u'Орудийная')], 'ru')
+        separated = buildOverlayData([
+            MarkerData('gunStatic', (0, 0, 0), u'Исходная'),
+            MarkerData('gunMoving', (1, 0, 0), u'Орудийная')], 'ru')
+
+        self.assertIn(u'две точки', merged[0]['tooltipBody'])
+        self.assertEqual(merged[0]['tooltipBody'].count(u'\n\n'), 3)
+        self.assertNotIn(u'две точки', separated[1]['tooltipBody'])
 
 
 if __name__ == '__main__':

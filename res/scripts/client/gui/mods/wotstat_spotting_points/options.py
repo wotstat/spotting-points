@@ -1,5 +1,6 @@
 OPTION_NAMES = ('showMaskPoints', 'showSpotPoints', 'showUiPoints',
-                'showGuides', 'allowTurretRotation', 'layoutDebug')
+                'showGuides', 'showTooltips', 'allowTurretRotation',
+                'layoutDebug')
 UI_FRAME_INTERVAL = 1.0 / 30.0
 
 
@@ -7,7 +8,8 @@ class DisplayOptions(object):
     def __init__(self):
         for name in OPTION_NAMES:
             setattr(self, name, False)
-        self.calloutMode = 1
+        self.showTooltips = True
+        self.calloutMode = 0
 
     def setValue(self, name, value):
         if name == 'calloutMode':

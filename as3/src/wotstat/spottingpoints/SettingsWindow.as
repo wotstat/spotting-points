@@ -13,18 +13,19 @@ package wotstat.spottingpoints {
         public var optionChanged:Function;
 
         private static const CONTENT_WIDTH:int = 560;
-        private static const CONTENT_HEIGHT:int = 212;
+        private static const CONTENT_HEIGHT:int = 246;
         private static const LEFT:int = 24;
         private static const RIGHT:int = 300;
         private static const ROW_HEIGHT:int = 34;
         private static const OPTION_NAMES:Array = [
             "showMaskPoints", "showSpotPoints", "showGuides",
-            "showUiPoints", "allowTurretRotation", "layoutDebug"
+            "showUiPoints", "showTooltips", "allowTurretRotation",
+            "layoutDebug"
         ];
         private var boxes:Object = {};
         private var headings:Object = {};
         private var calloutMode:DropdownMenu;
-        private var selectedMode:int = 1;
+        private var selectedMode:int = 0;
         private var updating:Boolean = false;
 
         public function SettingsWindow() {
@@ -37,16 +38,17 @@ package wotstat.spottingpoints {
             window.useBottomBtns = false;
             createHeading("group3d", LEFT, 14);
             createHeading("groupUi", RIGHT, 14);
-            createHeading("callouts", RIGHT, 81);
+            createHeading("callouts", RIGHT, 115);
             for (var index:int = 0; index < OPTION_NAMES.length; index++) {
                 var optionName:String = OPTION_NAMES[index];
                 var box:CheckBox = App.utils.classFactory.getComponent(
                     "CheckBox", CheckBox) as CheckBox;
                 box.name = optionName;
-                box.x = index == 3 ? RIGHT : LEFT;
+                box.x = index == 3 || index == 4 ? RIGHT : LEFT;
                 box.y = index < 3 ? 48 + index * ROW_HEIGHT :
-                    (index == 3 ? 48 : 166 + (index - 4) * ROW_HEIGHT);
-                box.width = index < 4 ? 236 : CONTENT_WIDTH - LEFT * 2;
+                    (index == 3 ? 48 :
+                    (index == 4 ? 82 : 200 + (index - 5) * ROW_HEIGHT));
+                box.width = index < 5 ? 236 : CONTENT_WIDTH - LEFT * 2;
                 box.addEventListener(ButtonEvent.CLICK, onOptionClick);
                 box.visible = optionName != "layoutDebug";
                 addChild(box);
@@ -56,7 +58,7 @@ package wotstat.spottingpoints {
                 "DropdownMenuUI", DropdownMenu) as DropdownMenu;
             calloutMode.x = RIGHT;
             calloutMode.name = "calloutMode";
-            calloutMode.y = 105;
+            calloutMode.y = 139;
             calloutMode.width = 236;
             calloutMode.dropdown = "DropdownMenu_ScrollingList";
             calloutMode.itemRenderer = "DropDownListItemRendererSound";
@@ -87,7 +89,7 @@ package wotstat.spottingpoints {
         private function drawGroupFrame(left:int, heading:TextField):void {
             var right:int = left + 260;
             var top:int = 24;
-            var bottom:int = 148;
+            var bottom:int = 183;
             graphics.lineStyle(1, 0x77776B, 0.45);
             graphics.moveTo(heading.x - 4, top);
             graphics.lineTo(left, top);

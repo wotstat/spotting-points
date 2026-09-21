@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'res',
 
 
 class DisplayOptionsTests(unittest.TestCase):
-    def test_defaults_disable_every_feature(self):
+    def test_defaults_enable_tooltips_without_starting_visuals(self):
         from wotstat_spotting_points.options import DisplayOptions
         options = DisplayOptions()
 
@@ -17,9 +17,10 @@ class DisplayOptionsTests(unittest.TestCase):
             'showSpotPoints': False,
             'showUiPoints': False,
             'showGuides': False,
+            'showTooltips': True,
             'allowTurretRotation': False,
             'layoutDebug': False,
-            'calloutMode': 1,
+            'calloutMode': 0,
         })
         self.assertFalse(options.hasVisuals())
 
@@ -42,6 +43,17 @@ class DisplayOptionsTests(unittest.TestCase):
         self.assertFalse(options.showMaskPoints)
         self.assertFalse(options.showSpotPoints)
         self.assertTrue(options.hasVisuals())
+
+    def test_tooltips_are_independent_of_callout_mode(self):
+        from wotstat_spotting_points.options import DisplayOptions
+        options = DisplayOptions()
+
+        self.assertTrue(options.setValue('showTooltips', False))
+        self.assertFalse(options.showTooltips)
+        self.assertEqual(options.calloutMode, 0)
+        self.assertTrue(options.setValue('calloutMode', 2))
+        self.assertFalse(options.showTooltips)
+        self.assertFalse(options.hasVisuals())
 
     def test_ui_only_mode_uses_bounded_update_interval(self):
         from wotstat_spotting_points.options import DisplayOptions

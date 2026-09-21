@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from collections import namedtuple
 
-from .localization import getMarkerLabels
+from .localization import getMarkerLabels, getMarkerTooltips
 
 MarkerData = namedtuple('MarkerData', 'id point label')
 
@@ -39,6 +39,19 @@ def buildMarkerData(maskPoints, spotPoints, language=None):
     return result
 
 
-def buildOverlayData(markers):
-    return [{'id': marker.id, 'label': marker.label, 'showLabel': True}
-            for marker in markers]
+def buildOverlayData(markers, language=None):
+    tooltips = getMarkerTooltips(language)
+    markerIds = set(marker.id for marker in markers)
+    result = []
+    for marker in markers:
+        tooltipId = ('combinedGun' if marker.id == 'gunMoving'
+                     and 'gunStatic' not in markerIds else marker.id)
+        tooltip = tooltips[tooltipId]
+        result.append({
+            'id': marker.id,
+            'label': marker.label,
+            'showLabel': True,
+            'tooltipTitle': tooltip['title'],
+            'tooltipBody': tooltip['body'],
+        })
+    return result

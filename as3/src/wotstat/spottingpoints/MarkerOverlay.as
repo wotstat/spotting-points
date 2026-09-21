@@ -6,6 +6,7 @@ package wotstat.spottingpoints {
     import flash.utils.Dictionary;
     import flash.utils.getTimer;
     import net.wg.infrastructure.base.AbstractView;
+    import net.wg.infrastructure.managers.ITooltipFormatter;
 
     public class MarkerOverlay extends AbstractView {
         public var solveLayout:Function;
@@ -19,8 +20,10 @@ package wotstat.spottingpoints {
         private var layoutDebug:Boolean = false;
         private var active:Boolean = true;
         private var calloutsEnabled:Boolean = true;
+        private var tooltipsEnabled:Boolean = true;
         private var lastLayoutRevision:Number = -1;
         private var lastLayoutResult:Object;
+        private var tooltipHoveredId:String;
 
         public function MarkerOverlay() {
             super();
@@ -110,8 +113,14 @@ package wotstat.spottingpoints {
                 var id:String = String(item.id);
                 var marker:SpotPointMarker = markers[id] as SpotPointMarker;
                 if (marker != null) {
+                    if (tooltipHoveredId == id &&
+                            (marker.tooltipTitle != String(item.tooltipTitle) ||
+                             marker.tooltipBody != String(item.tooltipBody))) {
+                        setTooltipTarget(null);
+                    }
                     marker.setData(
-                        String(item.label), Boolean(item.showLabel));
+                        String(item.label), Boolean(item.showLabel),
+                        String(item.tooltipTitle), String(item.tooltipBody));
                     marker.setHovered(id == hoveredId);
                 }
             }
@@ -119,6 +128,7 @@ package wotstat.spottingpoints {
 
         public function as_hitTest(cursorX:Number, cursorY:Number):String {
             if (!active) {
+                setTooltipTarget(null);
                 return null;
             }
             var stageX:Number = (cursorX + 1) * App.appWidth * 0.5;
@@ -126,10 +136,41 @@ package wotstat.spottingpoints {
             for (var index:int = numChildren - 1; index >= 0; index--) {
                 var marker:SpotPointMarker = getChildAt(index) as SpotPointMarker;
                 if (marker != null && marker.visible && marker.hitTestUi(stageX, stageY)) {
+                    setTooltipTarget(marker.hitTestTooltip(stageX, stageY) ?
+                        marker.pointId : null);
                     return marker.pointId;
                 }
             }
+            setTooltipTarget(null);
             return null;
+        }
+
+        public function as_hideTooltip():void {
+            setTooltipTarget(null);
+        }
+
+        private function setTooltipTarget(id:String):void {
+            if (!tooltipsEnabled) {
+                id = null;
+            }
+            if (tooltipHoveredId == id) {
+                return;
+            }
+            if (tooltipHoveredId != null) {
+                App.toolTipMgr.hide();
+            }
+            tooltipHoveredId = id;
+            if (id != null) {
+                var marker:SpotPointMarker = markers[id] as SpotPointMarker;
+                if (marker != null && marker.tooltipTitle.length > 0 &&
+                        marker.tooltipBody.length > 0) {
+                    var formatter:ITooltipFormatter =
+                        App.toolTipMgr.getNewFormatter();
+                    formatter.addHeader(marker.tooltipTitle);
+                    formatter.addBody(marker.tooltipBody.split("\n\n").join("<br/><br/>"));
+                    App.toolTipMgr.showComplex(formatter.make());
+                }
+            }
         }
 
         public function as_setActive(value:Boolean):void {
@@ -138,6 +179,9 @@ package wotstat.spottingpoints {
             }
             active = value;
             visible = value;
+            if (!value) {
+                setTooltipTarget(null);
+            }
         }
 
         public function as_setLayoutDebug(value:Boolean):void {
@@ -154,13 +198,27 @@ package wotstat.spottingpoints {
         }
 
         public function as_setCalloutsEnabled(value:Boolean):void {
+            if (calloutsEnabled != value) {
+                setTooltipTarget(null);
+            }
             calloutsEnabled = value;
             for each (var marker:SpotPointMarker in markers) {
                 marker.setCalloutsEnabled(value);
             }
         }
 
+        public function as_setTooltipsEnabled(value:Boolean):void {
+            if (tooltipsEnabled == value) {
+                return;
+            }
+            tooltipsEnabled = value;
+            if (!value) {
+                setTooltipTarget(null);
+            }
+        }
+
         public function as_clearMarkers():void {
+            setTooltipTarget(null);
             for (var key:Object in markers) {
                 removeMarker(String(key));
             }
@@ -326,6 +384,9 @@ package wotstat.spottingpoints {
             var marker:SpotPointMarker = markers[id] as SpotPointMarker;
             if (marker == null) {
                 return;
+            }
+            if (tooltipHoveredId == id) {
+                setTooltipTarget(null);
             }
             removeChild(marker);
             marker.dispose();

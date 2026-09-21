@@ -19,7 +19,7 @@
 проверка состояния и изображения в игре → сохранение изменений в Git.
 
 ```powershell
-./build.ps1 -Version 0.3.18 -Python C:/Python27/python.exe
+./build.ps1 -Version 0.3.19 -Python C:/Python27/python.exe
 C:/Python27/python.exe -B -m unittest discover -s tests
 ```
 
