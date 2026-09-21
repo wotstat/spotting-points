@@ -177,6 +177,7 @@ class MarkerOverlayView(View):
         self._controller = None
         self._ready = False
         self._windowsManager = None
+        self._markerLayerView = None
         self._sceneActive = False
         self._nativeMarkers = {}
         self._layoutMarkers = {}
@@ -367,17 +368,45 @@ class MarkerOverlayView(View):
     def _onWindowStatusChanged(self, uniqueId, status):
         self._refreshSceneActive()
 
+    def _attachToMarkerLayer(self):
+        # The Scaleform MARKER container is single-view. Loading our view there
+        # would replace the game's marker view, so only move our display root
+        # under the existing view and keep our lifecycle in the WINDOW layer.
+        app = _getApp()
+        if app is None or app.containerManager is None:
+            self._markerLayerView = None
+            return False
+        markerLayerView = app.containerManager.getView(WindowLayer.MARKER)
+        if markerLayerView is None:
+            self._markerLayerView = None
+            return False
+        if self._markerLayerView is markerLayerView:
+            return True
+        markerFlash = getattr(markerLayerView, 'flashObject', None)
+        overlayFlash = getattr(self, 'flashObject', None)
+        if markerFlash is None or overlayFlash is None:
+            return False
+        try:
+            markerFlash.addChild(overlayFlash)
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            log.exception(
+                'Failed to attach UI markers to the hangar marker layer')
+            return False
+        self._markerLayerView = markerLayerView
+        return True
+
     def _refreshSceneActive(self):
         if self._windowsManager is None:
             return
+        attachedToMarkerLayer = self._attachToMarkerLayer()
         windows = self._windowsManager.findWindows(lambda window: True)
         hasVehicleScene = any(
             _isVehicleSceneWindow(window) for window in windows)
         hasBlockingWindow = any(
             window.layer in _RESTRICTED_LAYERS
             and not _isBaseLobbyWindow(window) for window in windows)
-        active = isOverlaySceneActive(
-            hasVehicleScene, hasBlockingWindow)
+        active = (attachedToMarkerLayer and isOverlaySceneActive(
+            hasVehicleScene, hasBlockingWindow))
         if self._sceneActive != active:
             self._sceneActive = active
             self.flashObject.as_setActive(active)
@@ -430,6 +459,7 @@ class MarkerOverlayView(View):
         if self._windowsManager is not None:
             self._windowsManager.onWindowStatusChanged -= self._onWindowStatusChanged
             self._windowsManager = None
+        self._markerLayerView = None
         self._sceneActive = False
         self._nativeMarkers = None
         self._layoutMarkers = None

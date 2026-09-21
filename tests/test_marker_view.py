@@ -88,6 +88,7 @@ class FakeFlash(object):
         self.updated = []
         self.removed = []
         self.cleared = 0
+        self.active = []
 
     def as_createMarker(self, pointId, label):
         marker = object()
@@ -118,6 +119,9 @@ class FakeFlash(object):
 
     def as_clearMarkers(self):
         self.cleared += 1
+
+    def as_setActive(self, value):
+        self.active.append(value)
 
 
 def _module(name, **attributes):
@@ -188,6 +192,59 @@ class MarkerViewTests(unittest.TestCase):
 
         self.assertEqual(markerView.VIEW_LAYER,
                          sys.modules['frameworks.wulf'].WindowLayer.WINDOW)
+
+    def test_overlay_display_root_attaches_to_existing_marker_layer_view(self):
+        markerView, _ = _loadMarkerViewModule()
+        overlayFlash = FakeFlash()
+        attached = []
+        markerFlash = Bag(addChild=lambda child: attached.append(child))
+        firstMarkerView = Bag(flashObject=markerFlash)
+        markerContainer = Bag(current=firstMarkerView)
+        app = Bag(containerManager=Bag(
+            getView=lambda layer: markerContainer.current))
+        originalGetApp = markerView._getApp
+        markerView._getApp = lambda: app
+        view = object.__new__(markerView.MarkerOverlayView)
+        view.flashObject = overlayFlash
+        view._markerLayerView = None
+
+        try:
+            self.assertTrue(view._attachToMarkerLayer())
+            self.assertTrue(view._attachToMarkerLayer())
+            replacementFlash = Bag(
+                addChild=lambda child: attached.append(child))
+            markerContainer.current = Bag(flashObject=replacementFlash)
+            self.assertTrue(view._attachToMarkerLayer())
+        finally:
+            markerView._getApp = originalGetApp
+
+        self.assertEqual(attached, [overlayFlash, overlayFlash])
+        self.assertIs(view._markerLayerView, markerContainer.current)
+
+    def test_overlay_stays_inactive_until_marker_layer_is_available(self):
+        markerView, _ = _loadMarkerViewModule()
+        flash = FakeFlash()
+        windowsManager = Bag(findWindows=lambda predicate: [Bag(
+            layer=0, loadParams=Bag(viewKey=Bag(alias='hangar')))])
+        app = Bag(containerManager=Bag(getView=lambda layer: None))
+        originalGetApp = markerView._getApp
+        markerView._getApp = lambda: app
+        view = object.__new__(markerView.MarkerOverlayView)
+        view.flashObject = flash
+        view._windowsManager = windowsManager
+        view._markerLayerView = None
+        view._sceneActive = True
+        view._nativeMarkers = {}
+        view._layoutMarkers = {}
+        view._hoverMarkers = {}
+
+        try:
+            view._refreshSceneActive()
+        finally:
+            markerView._getApp = originalGetApp
+
+        self.assertFalse(view._sceneActive)
+        self.assertEqual(flash.active, [False])
 
     def test_layout_bridge_cache_stats_and_reset(self):
         markerView, _ = _loadMarkerViewModule()
