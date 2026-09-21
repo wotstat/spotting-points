@@ -33,7 +33,8 @@ def init(version):
         g_modsListApi.addModification(
             id=MOD_ID, name=labels['name'],
             description=labels['description'],
-            icon='', enabled=True, login=False, lobby=True,
+            icon='gui/maps/wotstat/spotting_points/modslist.png',
+            enabled=True, login=False, lobby=True,
             callback=lambda: showSettings(instance))
     except Exception:
         if settingsRegistered:
