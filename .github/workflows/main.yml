@@ -2,7 +2,7 @@ name: release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['[0-9]*']
 
 permissions:
   contents: write
@@ -27,7 +27,7 @@ jobs:
       - name: Compute artifact names
         shell: bash
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
+          VERSION=$GITHUB_REF_NAME
           BASE=wotstat.spotting-points_$VERSION
           printf '%s\n' "VERSION=$VERSION" "WOTMOD=${BASE}.wotmod" \
             "MTMOD=${BASE}.mtmod" >> "$GITHUB_ENV"
