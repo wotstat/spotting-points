@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<royale-config>
+  <target-player>17.0</target-player>
+  <swf-version>17</swf-version>
+  <compiler>
+    <targets><target>SWF</target></targets>
+    <source-path><path-element>src</path-element></source-path>
+    <library-path />
+    <external-library-path><path-element>libs</path-element></external-library-path>
+    <debug>false</debug>
+    <as3>true</as3>
+  </compiler>
+</royale-config>

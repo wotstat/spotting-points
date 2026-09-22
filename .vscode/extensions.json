@@ -1,3 +1,6 @@
 {
-  "recommendations": ["ms-python.python", "ms-python.vscode-pylance"]
+  "recommendations": [
+    "bowlerhatllc.vscode-as3mxml",
+    "ms-python.python"
+  ]
 }

@@ -1,0 +1,6 @@
+<root>
+  <id>wotstat.spotting-points</id>
+  <version>{{VERSION}}</version>
+  <name>WotStat Spotting Points</name>
+  <description>Hangar visibility and observation points</description>
+</root>

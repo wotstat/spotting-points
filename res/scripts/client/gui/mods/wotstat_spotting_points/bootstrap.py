@@ -13,56 +13,64 @@ _modsList = None
 
 
 def init(version):
-    global controller, _modsList
-    if controller is not None:
-        return
-    try:
-        from gui.modsListApi import g_modsListApi
-    except ImportError:
-        log.error('ModsList API is required to enable Spotting Points')
-        return
-    instance = SpottingPointsController()
-    settingsRegistered = False
-    markerRegistered = False
-    try:
-        labels = getModListLabels()
-        registerMarkerView()
-        markerRegistered = True
-        registerSettingsView()
-        settingsRegistered = True
-        g_modsListApi.addModification(
-            id=MOD_ID, name=labels['name'],
-            description=labels['description'],
-            icon='gui/maps/wotstat/spotting_points/modslist.png',
-            enabled=True, login=False, lobby=True,
-            callback=lambda: showSettings(instance))
-    except Exception:
-        if settingsRegistered:
-            unregisterSettingsView()
-        if markerRegistered:
-            unregisterMarkerView()
-        instance.destroy()
-        raise
-    controller = instance
-    _modsList = g_modsListApi
-    log.info('Loaded %s; display disabled', version)
+  global controller, _modsList
+
+  if controller is not None:
+    return
+
+  try:
+    from gui.modsListApi import g_modsListApi
+  except ImportError:
+    log.error('ModsList API is required to enable Spotting Points')
+    return
+
+  instance = SpottingPointsController()
+  settingsRegistered = False
+  markerRegistered = False
+
+  try:
+    labels = getModListLabels()
+    registerMarkerView()
+    markerRegistered = True
+    registerSettingsView()
+    settingsRegistered = True
+    g_modsListApi.addModification(
+      id=MOD_ID, name=labels['name'],
+      description=labels['description'],
+      icon='gui/maps/wotstat/spotting_points/modslist.png',
+      enabled=True, login=False, lobby=True,
+      callback=lambda: showSettings(instance))
+  except Exception:
+    if settingsRegistered:
+      unregisterSettingsView()
+
+    if markerRegistered:
+      unregisterMarkerView()
+
+    instance.destroy()
+    raise
+
+  controller = instance
+  _modsList = g_modsListApi
+  log.info('Loaded %s; display disabled', version)
 
 
 def fini():
-    global controller, _modsList
-    instance = controller
-    modsList = _modsList
-    controller = None
-    _modsList = None
+  global controller, _modsList
+  instance = controller
+  modsList = _modsList
+  controller = None
+  _modsList = None
+
+  try:
+    if modsList is not None:
+      modsList.removeModification(MOD_ID)
+  finally:
     try:
-        if modsList is not None:
-            modsList.removeModification(MOD_ID)
+      unregisterSettingsView()
     finally:
-        try:
-            unregisterSettingsView()
-        finally:
-            try:
-                unregisterMarkerView()
-            finally:
-                if instance is not None:
-                    instance.destroy()
+      try:
+        unregisterMarkerView()
+      finally:
+        if instance is not None:
+          instance.destroy()
