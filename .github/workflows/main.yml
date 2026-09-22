@@ -59,7 +59,3 @@ jobs:
           files: |
             dist/${{ env.WOTMOD }}
             dist/${{ env.MTMOD }}
-          body: |
-
-
-            ----------------------
