@@ -1,0 +1,66 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 2.7
+        uses: LizardByte/setup-python-action@master
+        with:
+          python-version: '2.7'
+
+      - name: Install node
+        uses: actions/setup-node@v4
+
+      - name: Install Apache Royale via npm
+        run: npm install -g --ignore-scripts @apache-royale/royale-js-swf@0.9.12
+
+      - name: Compute artifact names
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          BASE=wotstat.spotting-points_$VERSION
+          printf '%s\n' "VERSION=$VERSION" "WOTMOD=${BASE}.wotmod" \
+            "MTMOD=${BASE}.mtmod" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: ./build.sh -v "$VERSION"
+
+      - name: Archive .wotmod artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.WOTMOD }}
+          path: dist/${{ env.WOTMOD }}
+          if-no-files-found: error
+
+      - name: Archive .mtmod artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.MTMOD }}
+          path: dist/${{ env.MTMOD }}
+          if-no-files-found: error
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: true
+          token: ${{ github.token }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/${{ env.WOTMOD }}
+            dist/${{ env.MTMOD }}
+          body: |
+
+
+            ----------------------
+            `canary_upgrade=0.0`

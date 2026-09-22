@@ -3,4 +3,3 @@ dist/
 .DS_Store
 *.pyc
 __pycache__/
-as3/libs/*.swc
