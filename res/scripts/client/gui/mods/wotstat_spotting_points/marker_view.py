@@ -205,6 +205,10 @@ class MarkerOverlayView(View):
     self._nativeMarkers = {}
     self._layoutMarkers = {}
     self._hoverMarkers = {}
+    self._tooltipData = {}
+    self._tooltipTargetId = None
+    self._tooltipCallbackId = None
+    self._tooltipWindow = None
     self._initializeLayoutSolver()
 
   def _initializeLayoutSolver(self):
@@ -294,8 +298,10 @@ class MarkerOverlayView(View):
         self._removeMarker(pointId)
 
     self._updateHoverGeometry(vehicle, highlightGroup)
+    overlayData = buildOverlayData(markers)
+    self._tooltipData = dict((item['id'], item) for item in overlayData)
     self.flashObject.as_updateMarkers(
-      buildOverlayData(markers), hoveredPointId)
+      overlayData, hoveredPointId)
 
   def _createLayoutMarkers(self, prefix, points, partProvider):
     if partProvider is None:
@@ -393,6 +399,64 @@ class MarkerOverlayView(View):
     if self._ready:
       self.flashObject.as_setTooltipsEnabled(bool(value))
 
+    if not value:
+      self.tooltipTargetChanged(None)
+
+  def tooltipTargetChanged(self, pointId):
+    pointId = str(pointId) if pointId is not None else None
+
+    if pointId == self._tooltipTargetId:
+      return
+
+    self._clearTooltip()
+    self._tooltipTargetId = pointId
+
+    if (pointId is not None and self._ready and self._sceneActive
+        and self._controller.options.showTooltips):
+      self._tooltipCallbackId = BigWorld.callback(0.35, self._showTooltip)
+
+  def _clearTooltip(self):
+    if self._tooltipCallbackId is not None:
+      BigWorld.cancelCallback(self._tooltipCallbackId)
+      self._tooltipCallbackId = None
+
+    if self._tooltipWindow is not None:
+      self._tooltipWindow.destroy()
+      self._tooltipWindow = None
+
+    self._tooltipTargetId = None
+
+  def _showTooltip(self):
+    self._tooltipCallbackId = None
+
+    if (not self._ready or not self._sceneActive
+        or not self._controller.options.showTooltips):
+      return
+
+    item = self._tooltipData.get(self._tooltipTargetId)
+
+    if item is None or not item['tooltipTitle'] or not item['tooltipBody']:
+      return
+
+    cursor = GUI.mcursor()
+
+    if not cursor.inWindow or not cursor.inFocus:
+      return
+
+    from gui.impl.backport.backport_tooltip import DecoratedTooltipWindow
+    from gui.impl.pub.tooltip_window import SimpleTooltipContent
+    from skeletons.account_helpers.settings_core import ISettingsCore
+
+    window = DecoratedTooltipWindow(content=SimpleTooltipContent(
+      header=item['tooltipTitle'], body=item['tooltipBody']))
+    self._tooltipWindow = window
+    window.load()
+    position = cursor.position
+    width, height = GUI.screenResolution()[:2]
+    scale = dependency.instance(ISettingsCore).interfaceScale.get()
+    window.move(int((position.x + 1) * width * 0.5 / scale),
+      int((1 - position.y) * height * 0.5 / scale))
+
   def _onWindowStatusChanged(self, uniqueId, status):
     self._refreshSceneActive()
 
@@ -474,6 +538,8 @@ class MarkerOverlayView(View):
     if not self._ready:
       return
 
+    self._clearTooltip()
+    self._tooltipData = {}
     self._layoutSolver.reset()
     self._layoutTransitions.reset()
 
@@ -508,6 +574,7 @@ class MarkerOverlayView(View):
   def _dispose(self):
     global _view, _loading
     controller = self._controller
+    self._clearTooltip()
 
     if self._ready:
       self.clearMarkers()

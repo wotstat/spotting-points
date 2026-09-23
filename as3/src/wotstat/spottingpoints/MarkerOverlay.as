@@ -6,10 +6,10 @@ package wotstat.spottingpoints {
   import flash.utils.Dictionary;
   import flash.utils.getTimer;
   import net.wg.infrastructure.base.AbstractView;
-  import net.wg.infrastructure.managers.ITooltipFormatter;
 
   public class MarkerOverlay extends AbstractView {
     public var solveLayout:Function;
+    public var tooltipTargetChanged:Function;
 
     private var markers:Dictionary = new Dictionary();
     private var layoutAnchors:Dictionary = new Dictionary();
@@ -175,23 +175,9 @@ package wotstat.spottingpoints {
         return;
       }
 
-      if (tooltipHoveredId != null) {
-        App.toolTipMgr.hide();
-      }
-
       tooltipHoveredId = id;
-
-      if (id != null) {
-        var marker:SpotPointMarker = markers[id] as SpotPointMarker;
-
-        if (marker != null && marker.tooltipTitle.length > 0 &&
-            marker.tooltipBody.length > 0) {
-          var formatter:ITooltipFormatter =
-            App.toolTipMgr.getNewFormatter();
-          formatter.addHeader(marker.tooltipTitle);
-          formatter.addBody(marker.tooltipBody.split("\n\n").join("<br/><br/>"));
-          App.toolTipMgr.showComplex(formatter.make());
-        }
+      if (tooltipTargetChanged != null) {
+        tooltipTargetChanged(id);
       }
     }
 
@@ -476,6 +462,7 @@ package wotstat.spottingpoints {
       hoverOverlay = null;
       hoverGeometry = null;
       solveLayout = null;
+      tooltipTargetChanged = null;
       super.onDispose();
     }
   }
