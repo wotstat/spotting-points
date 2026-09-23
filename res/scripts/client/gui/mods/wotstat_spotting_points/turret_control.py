@@ -37,11 +37,13 @@ log = logging.getLogger('WOTSTAT_SPOTTING_POINTS')
 
 
 class TurretMouseControl(object):
-  def __init__(self, hangar):
+  def __init__(self, hangar, getDisplayVehicle):
     self._hangar = hangar
+    self._getDisplayVehicle = getDisplayVehicle
     self._angles = dependency.instance(ITurretAndGunAngles)
     self._enabled = False
     self._dragVehicle = None
+    self._dragModel = None
     self._dragPart = None
     self._moveListenerAdded = False
     self._cameraManager = None
@@ -67,6 +69,7 @@ class TurretMouseControl(object):
 
   def cancelDrag(self):
     self._dragVehicle = None
+    self._dragModel = None
     self._dragPart = None
 
     if self._moveListenerAdded:
@@ -91,7 +94,7 @@ class TurretMouseControl(object):
     if not self._hangar.isCursorOver3DScene:
       return
 
-    vehicle = self._hangar.getVehicleEntity()
+    vehicle = self._getDisplayVehicle()
 
     if not self._isReady(vehicle):
       return
@@ -115,6 +118,7 @@ class TurretMouseControl(object):
       return
 
     self._dragVehicle = vehicle
+    self._dragModel = vehicle.model
     self._dragPart = partIndex
 
     if not self._moveListenerAdded:
@@ -147,7 +151,9 @@ class TurretMouseControl(object):
   def _rotate(self, ctx):
     vehicle = self._dragVehicle
 
-    if vehicle is not self._hangar.getVehicleEntity() or not self._isReady(vehicle):
+    if (vehicle is not self._getDisplayVehicle()
+        or vehicle.model is not self._dragModel
+        or not self._isReady(vehicle)):
       self.cancelDrag()
       return
 

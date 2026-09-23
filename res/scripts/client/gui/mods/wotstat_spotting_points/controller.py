@@ -2,7 +2,9 @@ import logging
 
 import BigWorld
 import GUI
+from ClientSelectableCameraObject import ClientSelectableCameraObject
 from ClientSelectableCameraVehicle import ClientSelectableCameraVehicle
+from gui.hangar_cameras.hangar_camera_common import CameraMovementStates
 from helpers import dependency
 from skeletons.gui.shared.utils import IHangarSpace
 
@@ -16,14 +18,23 @@ from .turret_control import TurretMouseControl
 log = logging.getLogger('WOTSTAT_SPOTTING_POINTS')
 
 
+def _isReadyVehicle(vehicle):
+  return (isinstance(vehicle, ClientSelectableCameraVehicle)
+      and vehicle.isVehicleLoaded and vehicle.appearance is not None
+      and vehicle.typeDescriptor is not None and vehicle.model is not None)
+
+
 class SpottingPointsController(object):
   def __init__(self):
     self.options = DisplayOptions()
     self._callbackId = None
     self._hangar = dependency.instance(IHangarSpace)
-    self._turretControl = TurretMouseControl(self._hangar)
+    self._turretControl = TurretMouseControl(
+      self._hangar, self._getDisplayVehicle)
     self._markerView = None
     self._hoveredPointId = None
+    self._displayVehicle = None
+    self._displayModel = None
     self._nextMarkerUpdate = 0.0
     self._hangar.onSpaceCreate += self._onSpaceCreate
     self._hangar.onSpaceDestroy += self._onSpaceDestroy
@@ -85,6 +96,8 @@ class SpottingPointsController(object):
 
   def _clearMarkerState(self):
     self._hoveredPointId = None
+    self._displayVehicle = None
+    self._displayModel = None
     self._nextMarkerUpdate = 0.0
 
     if self._markerView is not None:
@@ -112,18 +125,38 @@ class SpottingPointsController(object):
       BigWorld.cancelCallback(self._callbackId)
       self._callbackId = None
 
+  def _getDisplayVehicle(self):
+    vehicle = self._hangar.getVehicleEntity()
+
+    if _isReadyVehicle(vehicle):
+      return vehicle
+
+    candidates = [entity for entity
+      in ClientSelectableCameraObject.allCameraObjects
+      if (isinstance(entity, ClientSelectableCameraVehicle)
+        and entity.spaceID == self._hangar.spaceID
+        and entity.state == CameraMovementStates.ON_OBJECT
+        and _isReadyVehicle(entity))]
+
+    return candidates[0] if len(candidates) == 1 else None
+
   def _draw(self):
     self._callbackId = None
 
     if not self.options.hasVisuals() or not self._hangar.spaceInited:
       return
 
-    vehicle = self._hangar.getVehicleEntity()
-
     try:
-      if (isinstance(vehicle, ClientSelectableCameraVehicle)
-          and vehicle.isVehicleLoaded and vehicle.appearance is not None
-          and vehicle.typeDescriptor is not None):
+      vehicle = self._getDisplayVehicle()
+
+      if (vehicle is not self._displayVehicle
+          or (vehicle is not None
+            and vehicle.model is not self._displayModel)):
+        self._clearMarkerState()
+        self._displayVehicle = vehicle
+        self._displayModel = vehicle.model if vehicle is not None else None
+
+      if vehicle is not None:
         now = BigWorld.time()
         updateUi = (self.options.showUiPoints
               and self._markerView is not None
