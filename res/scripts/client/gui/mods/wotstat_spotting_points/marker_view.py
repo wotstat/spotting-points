@@ -444,10 +444,12 @@ class MarkerOverlayView(View):
       return
 
     from gui.impl.backport.backport_tooltip import DecoratedTooltipWindow
+    from gui.impl.gen import R
     from gui.impl.pub.tooltip_window import SimpleTooltipContent
     from skeletons.account_helpers.settings_core import ISettingsCore
 
     window = DecoratedTooltipWindow(content=SimpleTooltipContent(
+      R.views.common.tooltip_window.simple_tooltip_content.SimpleTooltipContent(),
       header=item['tooltipTitle'], body=item['tooltipBody']))
     self._tooltipWindow = window
     window.load()
